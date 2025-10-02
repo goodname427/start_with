@@ -1,0 +1,9 @@
+{
+    "actions":
+    [
+        {
+            "action": "switch_audio_device",
+            "args": 1
+        }
+    ]
+}
