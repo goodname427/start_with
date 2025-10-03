@@ -2,11 +2,22 @@
     "actions":
     [
         {
+            "action": "action_name",
+            "args": "参数",
+            "run_while_prev_action_success": true,
+            "note":
+            {
+                "action": "执行某个操作",
+                "args": "传入想要执行的操作名称",
+                "run_while_prev_action_success": "是否在之前的操作成功时运行, 默认值为false"
+            }
+        },
+        {
             "action": "switch_audio_device",
             "args": "device_name",
             "note":
             {
-                "main": "切换Windows音频播放设备，可以用来打游戏将音频播放设备切换至耳机",
+                "action": "切换Windows音频播放设备，可以用来打游戏将音频播放设备切换至耳机",
                 "args": "传入想要切换的音频播放设备"
             }
         },
@@ -15,8 +26,26 @@
             "args": "app_path",
             "note":
             {
-                "main": "运行某个软件",
+                "action": "运行某个软件",
                 "args": "传入想要运行的软件路径"
+            }
+        },
+        {
+            "action": "apply_config",
+            "args": "config_name",
+            "note":
+            {
+                "action": "应用某个配置",
+                "args": "传入想要应用的配置名称"
+            }
+        },
+        {
+            "action": "kill_task",
+            "args": "task_name",
+            "note":
+            {
+                "action": "结束某个进程",
+                "args": "传入想要结束的进程名称"
             }
         }
     ]

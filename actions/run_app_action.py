@@ -8,7 +8,9 @@ class RunAppAction(StartWithAction):
         if not self._check_args_is_type(str):
             return False
 
-        print(f"Running app: {self.args}")
-        StartWithAction._execute_cmd(self.args)
-
-        return True
+        if StartWithAction._execute_cmd("cmd.exe", ["/c", "start", "", f"{self.args}"])["success"]:
+            print(f"Running app: {self.args}")
+            return True
+        else:
+            print(f"Failed to run app: {self.args}")
+            return False

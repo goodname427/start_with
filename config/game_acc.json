@@ -2,12 +2,12 @@
     "actions":
     [
         {
-            "action": "run_app",
-            "args": "D:\\Program Files (x86)\\LeiGod_Acc\\leigod_launcher.exe"
+            "action": "apply_config",
+            "args": "game"
         },
         {
-            "action": "switch_audio_device",
-            "args": "耳机 (INZONE H5 - Game)"
+            "action": "run_app",
+            "args": "D:\\Program Files\\LittleBigMouse\\LittleBigMouse.Ui.Avalonia.exe"
         }
     ]
 }

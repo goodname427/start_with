@@ -4,6 +4,14 @@
         {
             "action": "switch_audio_device",
             "args": "耳机 (INZONE H5 - Game)"
+        },
+        {
+            "action": "kill_task",
+            "args": "LittleBigMouse.Ui.Avalonia.exe"
+        },
+        {
+            "action": "kill_task",
+            "args": "LittleBigMouse.Hook.exe"
         }
     ]
 }

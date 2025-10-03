@@ -52,10 +52,8 @@ class SwitchAudioDeviceAction(StartWithAction):
         for device in devices:
             if device["Name"] == device_name:
                 StartWithAction._execute_cmd("powershell.exe", ["-Command", f"Set-AudioDevice -ID '{device['ID']}'"])
-                print(f"Switch audio device to {device_name} successfully.")
                 return True
 
-        print(f"Audio device {device_name} not found.")
         return False
 
     @override
@@ -63,4 +61,9 @@ class SwitchAudioDeviceAction(StartWithAction):
         if not self._check_args_is_type(str):
             return False
 
-        return SwitchAudioDeviceAction.switch_audio_device(self.args)
+        if SwitchAudioDeviceAction.switch_audio_device(self.args):
+            print(f"Switch audio device to {self.args} successfully.")
+            return True
+        else:
+            print(f"Failed to switch audio device to {self.args}.")
+            return False

@@ -29,15 +29,15 @@ class StartWithActionCollection:
             print("Config No actions found")
             return collection
 
-        for action in json_object["actions"]:
-            if "action" not in action:
-                print(f"Action [{action}] has no action")
+        for action_desc in json_object["actions"]:
+            if "action" not in action_desc:
+                print(f"Action [{action_desc}] has no action")
                 continue
-            if "args" not in action:
-                print(f"Action [{action}] has no args")
+            if "args" not in action_desc:
+                print(f"Action [{action_desc}] has no args")
                 continue
 
-            action_module_name = action["action"] + ACTION_MODULE_NAME_SUBFIX
+            action_module_name = action_desc["action"] + ACTION_MODULE_NAME_SUBFIX
             if action_module_name not in actions_module.__dict__:
                 print(f"Action Module [{action_module_name}] is not defined")
                 continue
@@ -52,7 +52,12 @@ class StartWithActionCollection:
                 print(f"Action class [{action_module_name}] does not inherit from StartWithAction")
                 continue
 
-            collection.add_action(action_class(action["args"]))
+            action = action_class(action_desc["args"])
+
+            if "run_while_prev_action_success" in action_desc:
+                action.run_while_prev_action_success = action_desc["run_while_prev_action_success"]
+
+            collection.add_action(action)
 
         return collection
 
