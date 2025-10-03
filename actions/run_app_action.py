@@ -5,7 +5,7 @@ from actions.action import StartWithAction
 class RunAppAction(StartWithAction):
     @override
     def run(self)->bool:
-        if not self.args:
+        if not self._check_args_is_type(str):
             return False
 
         print(f"Running app: {self.args}")

@@ -1,0 +1,9 @@
+{
+    "actions":
+    [
+        {
+            "action": "switch_audio_device",
+            "args": "扬声器 (3- EDIFIER M30 Plus)"
+        }
+    ]
+}

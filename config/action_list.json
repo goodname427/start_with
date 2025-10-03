@@ -1,0 +1,23 @@
+{
+    "actions":
+    [
+        {
+            "action": "switch_audio_device",
+            "args": "device_name",
+            "note":
+            {
+                "main": "切换Windows音频播放设备，可以用来打游戏将音频播放设备切换至耳机",
+                "args": "传入想要切换的音频播放设备"
+            }
+        },
+        {
+            "action": "run_app",
+            "args": "app_path",
+            "note":
+            {
+                "main": "运行某个软件",
+                "args": "传入想要运行的软件路径"
+            }
+        }
+    ]
+}

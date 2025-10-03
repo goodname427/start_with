@@ -3,7 +3,7 @@
     [
         {
             "action": "switch_audio_device",
-            "args": 1
+            "args": "耳机 (INZONE H5 - Game)"
         }
     ]
 }
