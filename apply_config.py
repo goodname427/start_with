@@ -18,7 +18,6 @@ def main():
     config_path = f"config/{args.config}.json"
 
     apply_config(config_path)
-    input("Press any key to continue...")
 
 if __name__ == '__main__':
     main()
