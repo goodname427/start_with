@@ -7,7 +7,7 @@
         },
         {
             "action": "run_app",
-            "args": "D:\\Program Files\\LittleBigMouse\\LittleBigMouse.Ui.Avalonia.exe"
+            "args": "D:\\Program Files (x86)\\LeiGod_Acc\\leigod_launcher.exe"
         }
     ]
 }
