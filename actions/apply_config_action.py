@@ -10,7 +10,7 @@ class ApplyConfigAction(StartWithAction):
         if not self._check_args_is_type(str):
             return False
 
-        if StartWithAction._execute_cmd("python", ["apply_config.py", "--config", self.args])["success"]:
+        if StartWithAction._execute_cmd("cmd.exe", ["/c", "python", "apply_config.py", "--config", self.args])["success"]:
             print(f"Apply Config: {self.args} success")
             return True
         else:
