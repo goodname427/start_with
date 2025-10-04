@@ -6,6 +6,10 @@
             "args": "耳机 (INZONE H5 - Game)"
         },
         {
+            "action": "switch_audio_device",
+            "args": "耳机式麦克风 (INZONE H5 - Chat)"
+        },
+        {
             "action": "kill_task",
             "args": "LittleBigMouse.Ui.Avalonia.exe"
         },

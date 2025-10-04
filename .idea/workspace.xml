@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b124aaeb-9e2b-4cd2-b62b-3ef260ab4dd1" name="Changes" comment="取消pause" />
+    <list default="true" id="b124aaeb-9e2b-4cd2-b62b-3ef260ab4dd1" name="Changes" comment="修改game_acc配置" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -136,7 +136,23 @@
       <option name="project" value="LOCAL" />
       <updated>1759500451217</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="修改game_acc配置">
+      <option name="closed" value="true" />
+      <created>1759500623877</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1759500623877</updated>
+    </task>
+    <task id="LOCAL-00006" summary="修改game_acc配置">
+      <option name="closed" value="true" />
+      <created>1759500859790</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1759500859790</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -144,7 +160,8 @@
     <MESSAGE value="完善基础框架，添加默认config" />
     <MESSAGE value="添加更多Action&#10;完善配置" />
     <MESSAGE value="取消pause" />
-    <option name="LAST_COMMIT_MESSAGE" value="取消pause" />
+    <MESSAGE value="修改game_acc配置" />
+    <option name="LAST_COMMIT_MESSAGE" value="修改game_acc配置" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

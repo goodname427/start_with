@@ -6,6 +6,10 @@
             "args": "扬声器 (3- EDIFIER M30 Plus)"
         },
         {
+            "action": "switch_audio_device",
+            "args": "耳机式麦克风 (3- EDIFIER M30 Plus)"
+        },
+        {
             "action": "run_app",
             "args": "D:\\Program Files\\LittleBigMouse\\LittleBigMouse.Ui.Avalonia.exe"
         }
