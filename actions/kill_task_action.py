@@ -18,5 +18,5 @@ class KillTaskAction(StartWithAction):
             return False
 
     @override
-    def run_as_admin(self)->bool:
+    def should_run_as_admin(self)->bool:
         return True

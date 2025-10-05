@@ -16,7 +16,7 @@ class CommandUtils:
         ]
 
         try:
-            return subprocess.run(combined, check=True, capture_output=True, text=True)
+            return subprocess.run(combined, capture_output=True, text=True)
         except Exception as e:
             print(f"Error when executing command [{combined}]: {e}")
             return subprocess.CompletedProcess(combined, CMD_RETURN_CODE_ERROR, "", str(e))
@@ -31,6 +31,7 @@ class CommandUtils:
     @staticmethod
     def require_admin():
         if CommandUtils.is_run_as_admin():
+            print("Run as admin")
             return
 
         ctypes.windll.shell32.ShellExecuteW(

@@ -64,14 +64,14 @@ class StartWithActionCollection:
 
     def __init__(self):
         self.actions = []
-        self.run_as_admin = False
+        self.should_run_as_admin = False
 
     def add_action(self, action):
         self.actions.append(action)
-        self.run_as_admin = self.run_as_admin or action.run_as_admin()
+        self.should_run_as_admin = self.should_run_as_admin or action.should_run_as_admin()
 
     def run(self):
-        if self.run_as_admin:
+        if self.should_run_as_admin:
             CommandUtils.require_admin()
 
         prev_action_success = True

@@ -9,7 +9,7 @@ class RunAppAction(StartWithAction):
         if not self._check_args_is_type(str):
             return False
 
-        if CommandUtils.execute_command("cmd.exe", ["/c", "start", "", f"""{self.args}"""]).returncode == CMD_RETURN_CODE_SUCCESS:
+        if CommandUtils.execute_command("cmd.exe", ["/c", "start", "", self.args]).returncode == CMD_RETURN_CODE_SUCCESS:
             print(f"Run app [{self.args}] success")
             return True
         else:
@@ -17,5 +17,5 @@ class RunAppAction(StartWithAction):
             return False
 
     @override
-    def run_as_admin(self) -> bool:
+    def should_run_as_admin(self) -> bool:
         return True

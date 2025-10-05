@@ -10,7 +10,7 @@ class StartWithAction:
     def run(self)->bool:
         return True
 
-    def run_as_admin(self)->bool:
+    def should_run_as_admin(self)->bool:
         return False
 
     def _check_args_is_type(self, expected_type):

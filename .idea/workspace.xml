@@ -4,16 +4,15 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b124aaeb-9e2b-4cd2-b62b-3ef260ab4dd1" name="Changes" comment="修改配置，添加麦克风切换">
-      <change afterPath="$PROJECT_DIR$/common/command_utils.py" afterDir="false" />
+    <list default="true" id="b124aaeb-9e2b-4cd2-b62b-3ef260ab4dd1" name="Changes" comment="将cmd执行相关命令整理到CommandUtils中&#10;新增管理员请求">
       <change beforePath="$PROJECT_DIR$/.idea/MarsCodeWorkspaceAppSettings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/MarsCodeWorkspaceAppSettings.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/actions/action.py" beforeDir="false" afterPath="$PROJECT_DIR$/actions/action.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/actions/apply_config_action.py" beforeDir="false" afterPath="$PROJECT_DIR$/actions/apply_config_action.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/actions/kill_task_action.py" beforeDir="false" afterPath="$PROJECT_DIR$/actions/kill_task_action.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/actions/run_app_action.py" beforeDir="false" afterPath="$PROJECT_DIR$/actions/run_app_action.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/actions/switch_audio_device_action.py" beforeDir="false" afterPath="$PROJECT_DIR$/actions/switch_audio_device_action.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apply_config.py" beforeDir="false" afterPath="$PROJECT_DIR$/apply_config.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/common/action_collection.py" beforeDir="false" afterPath="$PROJECT_DIR$/common/action_collection.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/common/command_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/common/command_utils.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -170,7 +169,15 @@
       <option name="project" value="LOCAL" />
       <updated>1759589471577</updated>
     </task>
-    <option name="localTasksCounter" value="8" />
+    <task id="LOCAL-00008" summary="将cmd执行相关命令整理到CommandUtils中&#10;新增管理员请求">
+      <option name="closed" value="true" />
+      <created>1759663489857</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1759663489857</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -180,7 +187,8 @@
     <MESSAGE value="取消pause" />
     <MESSAGE value="修改game_acc配置" />
     <MESSAGE value="修改配置，添加麦克风切换" />
-    <option name="LAST_COMMIT_MESSAGE" value="修改配置，添加麦克风切换" />
+    <MESSAGE value="将cmd执行相关命令整理到CommandUtils中&#10;新增管理员请求" />
+    <option name="LAST_COMMIT_MESSAGE" value="将cmd执行相关命令整理到CommandUtils中&#10;新增管理员请求" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
