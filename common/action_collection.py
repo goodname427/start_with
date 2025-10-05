@@ -2,6 +2,7 @@ import importlib
 import json
 
 from actions.action import StartWithAction
+from common.command_utils import CommandUtils
 
 actions_module = importlib.import_module("actions")
 
@@ -63,11 +64,16 @@ class StartWithActionCollection:
 
     def __init__(self):
         self.actions = []
+        self.run_as_admin = False
 
     def add_action(self, action):
         self.actions.append(action)
+        self.run_as_admin = self.run_as_admin or action.run_as_admin()
 
     def run(self):
+        if self.run_as_admin:
+            CommandUtils.require_admin()
+
         prev_action_success = True
         for action in self.actions:
             if action.run_while_prev_action_success and not prev_action_success:

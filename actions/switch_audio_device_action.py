@@ -2,6 +2,7 @@ import re
 from typing import override
 
 from actions.action import StartWithAction
+from common.command_utils import CommandUtils, CMD_RETURN_CODE_SUCCESS
 
 
 class SwitchAudioDeviceAction(StartWithAction):
@@ -11,11 +12,11 @@ class SwitchAudioDeviceAction(StartWithAction):
         Get all audio devices.
         :return: A list of dictionaries, each dictionary contains the device information.
         """
-        result = StartWithAction._execute_cmd("powershell.exe", ["-Command", f"Get-AudioDevice -List"])
-        if not result["success"] or result["output"] is None:
+        result = CommandUtils.execute_command("powershell.exe", ["-Command", f"Get-AudioDevice -List"])
+        if result.returncode != CMD_RETURN_CODE_SUCCESS:
             return []
 
-        lines = result["output"].splitlines()
+        lines = result.stdout.splitlines()
         device_descriptions = []
 
         # 筛选出包含音频设备信息的行
@@ -51,7 +52,7 @@ class SwitchAudioDeviceAction(StartWithAction):
 
         for device in devices:
             if device["Name"] == device_name:
-                StartWithAction._execute_cmd("powershell.exe", ["-Command", f"Set-AudioDevice -ID '{device['ID']}'"])
+                CommandUtils.execute_command("powershell.exe", ["-Command", f"Set-AudioDevice -ID '{device['ID']}'"])
                 return True
 
         return False
@@ -62,8 +63,8 @@ class SwitchAudioDeviceAction(StartWithAction):
             return False
 
         if SwitchAudioDeviceAction.switch_audio_device(self.args):
-            print(f"Switch audio device to {self.args} successfully.")
+            print(f"Switch audio device to {self.args} success")
             return True
         else:
-            print(f"Failed to switch audio device to {self.args}.")
+            print(f"Switch audio device to {self.args} failed")
             return False
