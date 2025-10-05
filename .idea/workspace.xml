@@ -4,14 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="b124aaeb-9e2b-4cd2-b62b-3ef260ab4dd1" name="Changes" comment="将cmd执行相关命令整理到CommandUtils中&#10;新增管理员请求">
+    <list default="true" id="b124aaeb-9e2b-4cd2-b62b-3ef260ab4dd1" name="Changes" comment="调整管理员方式">
       <change beforePath="$PROJECT_DIR$/.idea/MarsCodeWorkspaceAppSettings.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/MarsCodeWorkspaceAppSettings.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/actions/action.py" beforeDir="false" afterPath="$PROJECT_DIR$/actions/action.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/actions/kill_task_action.py" beforeDir="false" afterPath="$PROJECT_DIR$/actions/kill_task_action.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/actions/run_app_action.py" beforeDir="false" afterPath="$PROJECT_DIR$/actions/run_app_action.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/apply_config.py" beforeDir="false" afterPath="$PROJECT_DIR$/apply_config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/common/action_collection.py" beforeDir="false" afterPath="$PROJECT_DIR$/common/action_collection.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/common/command_utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/common/command_utils.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -89,7 +85,7 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <option name="SCRIPT_NAME" value="$PROJECT_DIR$/apply_config.py" />
-      <option name="PARAMETERS" value="-c game" />
+      <option name="PARAMETERS" value="-c desktop" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="false" />
@@ -177,7 +173,15 @@
       <option name="project" value="LOCAL" />
       <updated>1759663489857</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="调整管理员方式">
+      <option name="closed" value="true" />
+      <created>1759666000806</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1759666000806</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -188,7 +192,8 @@
     <MESSAGE value="修改game_acc配置" />
     <MESSAGE value="修改配置，添加麦克风切换" />
     <MESSAGE value="将cmd执行相关命令整理到CommandUtils中&#10;新增管理员请求" />
-    <option name="LAST_COMMIT_MESSAGE" value="将cmd执行相关命令整理到CommandUtils中&#10;新增管理员请求" />
+    <MESSAGE value="调整管理员方式" />
+    <option name="LAST_COMMIT_MESSAGE" value="调整管理员方式" />
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>

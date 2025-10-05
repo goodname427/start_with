@@ -22,6 +22,19 @@ class CommandUtils:
             return subprocess.CompletedProcess(combined, CMD_RETURN_CODE_ERROR, "", str(e))
 
     @staticmethod
+    def open(cmd: str, args: list = None) -> subprocess.Popen | None:
+        combined = [
+            cmd,
+            *(args if args is not None else []),
+        ]
+
+        try:
+            return subprocess.Popen(combined, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        except Exception as e:
+            print(f"Error when opening command [{combined}]: {e}")
+            return None
+
+    @staticmethod
     def is_run_as_admin():
         try:
             return ctypes.windll.shell32.IsUserAnAdmin()

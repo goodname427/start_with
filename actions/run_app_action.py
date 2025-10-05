@@ -9,7 +9,7 @@ class RunAppAction(StartWithAction):
         if not self._check_args_is_type(str):
             return False
 
-        if CommandUtils.execute_command("cmd.exe", ["/c", "start", "", self.args]).returncode == CMD_RETURN_CODE_SUCCESS:
+        if CommandUtils.open("cmd.exe", ["/c", "start", "", self.args]) is not None:
             print(f"Run app [{self.args}] success")
             return True
         else:
