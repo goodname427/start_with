@@ -1,0 +1,13 @@
+{
+    "actions":
+    [
+        {
+            "action": "apply_config",
+            "args": "game"
+        },
+        {
+            "action": "run_app",
+            "args": "D:\\Program Files (x86)\\Netease\\UU\\uu_launcher.exe"
+        }
+    ]
+}
