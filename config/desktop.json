@@ -3,11 +3,11 @@
     [
         {
             "action": "switch_audio_device",
-            "args": "扬声器 (3- EDIFIER M30 Plus)"
+            "args": "扬声器 (EDIFIER M30 Plus)"
         },
         {
             "action": "switch_audio_device",
-            "args": "耳机式麦克风 (3- EDIFIER M30 Plus)"
+            "args": "耳机式麦克风 (EDIFIER M30 Plus)"
         },
         {
             "action": "run_app",
