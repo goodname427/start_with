@@ -1,13 +1,6 @@
 {
     "actions":
     [
-        {
-            "action": "kill_task",
-            "args": "LittleBigMouse.Ui.Avalonia.exe"
-        },
-        {
-            "action": "kill_task",
-            "args": "LittleBigMouse.Hook.exe"
-        }
+        
     ]
 }
