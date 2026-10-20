@@ -54,7 +54,7 @@ python start_with_gui.py
 
 在「配置文件」页可以：
 
-- **新建配置**：填写名称后，用图形界面添加操作（运行程序、切换音频设备、结束进程、应用其他配置）
+- **新建配置**：填写名称后，用图形界面添加操作（运行程序、切换音频设备、结束进程、应用其他配置、等待）
 - **修改配置**：双击配置或点击「编辑」，可调整操作参数与执行顺序
 - **应用配置**：选中后点击「▶ 应用配置」，等同于执行 `python apply_config.py -c <名称>`
 
@@ -65,6 +65,43 @@ python start_with_gui.py
 ```commandline
 python apply_config.py -c game
 ```
+
+### 先启动加速器，再启动游戏
+
+如果某个游戏需要先打开加速器完成加速、再启动游戏，把步骤按顺序写进同一个配置即可：
+
+```json
+{
+    "actions": [
+        {
+            "action": "apply_config",
+            "args": "game"
+        },
+        {
+            "action": "run_app",
+            "args": "D:\\Program Files (x86)\\Netease\\UU\\uu_launcher.exe"
+        },
+        {
+            "action": "wait_process",
+            "args": "uu.exe|120"
+        },
+        {
+            "action": "wait",
+            "args": "15"
+        },
+        {
+            "action": "run_app",
+            "args": "E:\\SteamLibrary\\steamapps\\common\\...\\game.exe"
+        }
+    ]
+}
+```
+
+- `wait_process`：等待加速器进程出现，参数可写 `进程名|超时秒数`（默认 120 秒），进程名以实际为准，可在操作编辑器中刷新选择
+- `wait`：再等待固定秒数，给加速器留出真正完成加速的时间；如果加速器需要手动点「加速」，就填够点击所需的秒数
+- 最后一个 `run_app`：加速完成后再启动游戏
+
+通过托盘「应用配置」或 `python apply_config.py -c <名称>` 应用这个配置即可。注意应用绑定是在程序启动**之后**才触发，无法提前打开加速器。
 
 ## 应用绑定
 

@@ -789,7 +789,8 @@ class StartWithApp:
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=300,
+                # 配置里可能包含「等待」操作，超时时间需要覆盖较长的加速等待
+                timeout=900,
                 env=env,
                 creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
             )

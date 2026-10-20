@@ -143,6 +143,9 @@ class ActionEditorDialog(tk.Toplevel):
         elif kind == "process":
             self.combo_args.configure(values=self._safe_process_names())
             self.btn_aux.configure(text="刷新", command=self._refresh_processes, state="normal")
+        elif kind == "duration":
+            self.combo_args.configure(values=["3", "5", "10", "15", "20", "30", "45", "60", "90", "120"])
+            self.btn_aux.grid_remove()
         elif kind == "audio_device":
             self.combo_args.configure(values=[])
             self.btn_aux.configure(text="刷新", command=self._refresh_audio_devices, state="normal")
@@ -232,6 +235,20 @@ class ActionEditorDialog(tk.Toplevel):
             messagebox.showwarning("参数不能为空", f"请填写「{definition.args_label}」。", parent=self)
             self.combo_args.focus_set()
             return
+
+        if definition.args_kind == "duration":
+            try:
+                seconds = float(args)
+            except ValueError:
+                seconds = -1.0
+            if seconds <= 0:
+                messagebox.showwarning(
+                    "等待时长无效",
+                    "请填写大于 0 的秒数（支持小数），例如 15 或 2.5。",
+                    parent=self,
+                )
+                self.combo_args.focus_set()
+                return
 
         action = {"action": definition.name, "args": args}
         if self.condition_var.get():

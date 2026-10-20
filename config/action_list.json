@@ -47,6 +47,24 @@
                 "action": "结束某个进程",
                 "args": "传入想要结束的进程名称"
             }
+        },
+        {
+            "action": "wait",
+            "args": "seconds",
+            "note":
+            {
+                "action": "等待固定时长，用于等加速器完成加速后再启动程序",
+                "args": "传入等待秒数，支持小数，例如 15 或 2.5"
+            }
+        },
+        {
+            "action": "wait_process",
+            "args": "process_name|timeout_seconds",
+            "note":
+            {
+                "action": "等待某个进程出现后再继续",
+                "args": "传入进程名称，可选加 |超时秒数（默认 120 秒），例如 uu.exe|120"
+            }
         }
     ]
 }
