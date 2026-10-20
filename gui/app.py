@@ -461,7 +461,7 @@ class StartWithApp:
         self.binding_count_label.pack(side="left")
         tk.Label(
             head,
-            text="程序启动时自动应用配置；优先匹配单个应用，其次匹配文件夹",
+            text="启动/退出时自动应用配置；优先级：单个应用 > 子文件夹 > 上级文件夹",
             bg=theme.CARD,
             fg=theme.MUTED,
             font=theme.FONT_SMALL,
@@ -474,15 +474,16 @@ class StartWithApp:
 
         self.binding_tree = ttk.Treeview(
             binding_wrap,
-            columns=("state", "type", "target", "config"),
+            columns=("state", "type", "target", "config", "close"),
             show="headings",
             selectmode="browse",
         )
         binding_columns = (
-            ("state", "状态", sp(70), "center", False, sp(60)),
-            ("type", "类型", sp(90), "center", False, sp(70)),
-            ("target", "目标", sp(500), "w", True, sp(200)),
-            ("config", "配置", sp(140), "w", False, sp(100)),
+            ("state", "状态", sp(66), "center", False, sp(56)),
+            ("type", "类型", sp(84), "center", False, sp(64)),
+            ("target", "目标", sp(420), "w", True, sp(180)),
+            ("config", "启动时", sp(128), "w", False, sp(96)),
+            ("close", "退出后", sp(128), "w", False, sp(96)),
         )
         for key, title, width, anchor, stretch, minwidth in binding_columns:
             self.binding_tree.heading(key, text=title)
@@ -553,18 +554,20 @@ class StartWithApp:
         self.binding_tree.delete(*self.binding_tree.get_children())
         for binding in self.bindings:
             missing = not config_store.config_path(binding.config).exists()
+            missing_close = bool(binding.close_config) and not config_store.config_path(binding.close_config).exists()
             state = "启用" if binding.enabled else "已停用"
             config_text = binding.config + ("  ⚠" if missing else "")
+            close_text = (binding.close_config + ("  ⚠" if missing_close else "")) if binding.close_config else "—"
             tags = []
             if not binding.enabled:
                 tags.append("disabled")
-            if missing:
+            if missing or missing_close:
                 tags.append("missing")
             self.binding_tree.insert(
                 "",
                 "end",
                 iid=binding.id,
-                values=(state, binding.display_type(), binding.display_target(), config_text),
+                values=(state, binding.display_type(), binding.display_target(), config_text, close_text),
                 tags=tuple(tags),
             )
 
@@ -613,15 +616,16 @@ class StartWithApp:
 
         self.bindings.append(binding)
         self._persist_bindings(select=binding.id)
-        self._log(f"已新增绑定：{binding.display_target()} → {binding.config}", "success")
+        self._log(f"已新增绑定：{binding.display_target()} → {binding.display_configs()}", "success")
 
     def _edit_binding(self) -> None:
         binding = self._selected_binding()
         if binding is None:
             return
         config_names = self._available_config_names()
-        if binding.config not in config_names:
-            config_names = [*config_names, binding.config]
+        for name in (binding.config, binding.close_config):
+            if name and name not in config_names:
+                config_names.append(name)
 
         holder: dict[str, AppBinding] = {}
         dialog = BindingEditorDialog(
@@ -640,7 +644,7 @@ class StartWithApp:
                 self.bindings[index] = result
                 break
         self._persist_bindings(select=result.id)
-        self._log(f"已更新绑定：{result.display_target()} → {result.config}", "info")
+        self._log(f"已更新绑定：{result.display_target()} → {result.display_configs()}", "info")
 
     def _delete_binding(self) -> None:
         binding = self._selected_binding()
@@ -648,7 +652,7 @@ class StartWithApp:
             return
         if not messagebox.askyesno(
             "删除绑定",
-            f"确定要删除这条绑定吗？\n{binding.display_target()} → {binding.config}",
+            f"确定要删除这条绑定吗？\n{binding.display_target()} → {binding.display_configs()}",
             parent=self.root,
         ):
             return
@@ -678,7 +682,13 @@ class StartWithApp:
 
     def _sync_watcher(self) -> None:
         enabled = [
-            b for b in self.bindings if b.enabled and b.config and config_store.config_path(b.config).exists()
+            b
+            for b in self.bindings
+            if b.enabled
+            and (
+                (b.config and config_store.config_path(b.config).exists())
+                or (b.close_config and config_store.config_path(b.close_config).exists())
+            )
         ]
         if not self.settings.get("monitor_enabled", True) or not enabled:
             self._stop_watcher()
@@ -687,7 +697,11 @@ class StartWithApp:
 
         interval = float(self.settings.get("poll_interval", 2.0))
         if self._watcher is None:
-            self._watcher = BindingWatcher(self._on_process_started, interval=interval)
+            self._watcher = BindingWatcher(
+                self._on_process_started,
+                self._on_process_stopped,
+                interval=interval,
+            )
             self._watcher.start()
         else:
             self._watcher.set_interval(interval)
@@ -701,6 +715,9 @@ class StartWithApp:
 
     def _on_process_started(self, binding: AppBinding, process) -> None:
         self._queue.put(("trigger", {"binding": binding, "process": process}))
+
+    def _on_process_stopped(self, binding: AppBinding, process) -> None:
+        self._queue.put(("trigger_close", {"binding": binding, "process": process}))
 
     def _handle_trigger(self, payload: dict) -> None:
         if not self.settings.get("monitor_enabled", True):
@@ -717,6 +734,26 @@ class StartWithApp:
 
         self._log(f"检测到 {process.name} 启动 → 应用配置 [{current.config}]", "success")
         self.apply_config(current.config, source="binding", detail=process.name)
+
+    def _handle_close_trigger(self, payload: dict) -> None:
+        if not self.settings.get("monitor_enabled", True):
+            return
+
+        binding: AppBinding = payload["binding"]
+        process = payload["process"]
+        current = next((b for b in self.bindings if b.id == binding.id), None)
+        if current is None or not current.enabled or not current.close_config:
+            return
+        if not config_store.config_path(current.close_config).exists():
+            self._log(f"绑定命中，但退出配置 [{current.close_config}] 不存在。", "error")
+            return
+
+        self._log(f"检测到 {process.name} 退出 → 应用配置 [{current.close_config}]", "success")
+        self.apply_config(
+            current.close_config,
+            source="binding",
+            detail=f"{process.name} 已退出",
+        )
 
     def apply_config(self, name: str, source: str = "manual", detail: str | None = None) -> None:
         if not config_store.config_path(name).exists():
@@ -1027,6 +1064,8 @@ class StartWithApp:
                 try:
                     if kind == "trigger":
                         self._handle_trigger(payload)
+                    elif kind == "trigger_close":
+                        self._handle_close_trigger(payload)
                     elif kind == "apply_done":
                         self._handle_apply_done(payload)
                     elif kind == "tray":

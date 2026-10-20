@@ -12,6 +12,125 @@ from common.paths import GUI_ASSETS_DIR
 logger = logging.getLogger(__name__)
 
 
+def _build_icon_image():
+    """绘制应用图标：深蓝渐变底 + 斜向起飞的火箭，表达“启动/应用配置”。"""
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter
+
+    size = 1024
+    center = size // 2
+    top = (67, 56, 202)
+    bottom = (29, 78, 216)
+
+    image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    gradient = Image.new("RGBA", (size, size))
+    gradient_draw = ImageDraw.Draw(gradient)
+    for y in range(size):
+        ratio = y / (size - 1)
+        color = tuple(round(top[i] + (bottom[i] - top[i]) * ratio) for i in range(3)) + (255,)
+        gradient_draw.line([(0, y), (size, y)], fill=color)
+
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(
+        (28, 28, size - 28, size - 28), radius=236, fill=255
+    )
+    image.paste(gradient, (0, 0), mask)
+
+    # 中心柔光
+    glow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    ImageDraw.Draw(glow).ellipse(
+        (center - 360, center - 360, center + 360, center + 360),
+        fill=(129, 140, 248, 95),
+    )
+    glow = glow.filter(ImageFilter.GaussianBlur(120))
+    glow.putalpha(ImageChops.multiply(glow.getchannel("A"), mask))
+    image = Image.alpha_composite(image, glow)
+
+    # 背景轨道
+    orbit = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    ImageDraw.Draw(orbit).ellipse(
+        (center - 430, center - 310, center + 430, center + 310),
+        outline=(255, 255, 255, 38),
+        width=6,
+    )
+    orbit = orbit.rotate(24, resample=Image.Resampling.BICUBIC, center=(center, center))
+    orbit.putalpha(ImageChops.multiply(orbit.getchannel("A"), mask))
+    image = Image.alpha_composite(image, orbit)
+
+    # 顶部高光
+    gloss = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    ImageDraw.Draw(gloss).ellipse(
+        (-280, -760, size + 280, 460), fill=(255, 255, 255, 30)
+    )
+    gloss = gloss.filter(ImageFilter.GaussianBlur(60))
+    gloss.putalpha(ImageChops.multiply(gloss.getchannel("A"), mask))
+    image = Image.alpha_composite(image, gloss)
+
+    rocket = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(rocket)
+
+    # 尾焰
+    draw.polygon(
+        [(center - 60, center + 290), (center, center + 470), (center + 60, center + 290)],
+        fill=(251, 146, 60, 255),
+    )
+    draw.polygon(
+        [(center - 28, center + 300), (center, center + 400), (center + 28, center + 300)],
+        fill=(254, 240, 138, 255),
+    )
+
+    # 机身与尾翼
+    silhouette = [
+        (center, center - 330),
+        (center + 95, center - 170),
+        (center + 95, center + 70),
+        (center + 180, center + 230),
+        (center + 95, center + 245),
+        (center + 95, center + 260),
+        (center - 95, center + 260),
+        (center - 95, center + 245),
+        (center - 180, center + 230),
+        (center - 95, center + 70),
+        (center - 95, center - 170),
+    ]
+    draw.polygon(silhouette, fill=(248, 250, 252, 255))
+
+    # 机身侧面阴影
+    body_shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    ImageDraw.Draw(body_shadow).polygon(
+        [
+            (center + 40, center - 220),
+            (center + 95, center - 170),
+            (center + 95, center + 245),
+            (center + 40, center + 245),
+        ],
+        fill=(15, 23, 42, 26),
+    )
+    body_mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(body_mask).polygon(silhouette, fill=255)
+    body_shadow.putalpha(ImageChops.multiply(body_shadow.getchannel("A"), body_mask))
+    rocket = Image.alpha_composite(rocket, body_shadow)
+    draw = ImageDraw.Draw(rocket)
+
+    # 喷口
+    draw.rounded_rectangle(
+        (center - 64, center + 230, center + 64, center + 300),
+        radius=22,
+        fill=(203, 213, 225, 255),
+    )
+
+    # 舷窗
+    draw.ellipse((center - 78, center - 120, center + 78, center + 36), fill=(30, 64, 175, 255))
+    draw.ellipse((center - 64, center - 106, center + 64, center + 22), fill=(37, 99, 235, 255))
+    draw.ellipse(
+        (center - 46, center - 88, center + 12, center - 18),
+        fill=(147, 197, 253, 185),
+    )
+
+    rocket = rocket.rotate(-40, resample=Image.Resampling.BICUBIC, center=(center, center))
+    image = Image.alpha_composite(image, rocket)
+    return image.resize((512, 512), Image.Resampling.LANCZOS)
+
+
 def ensure_tray_icon() -> str | None:
     """生成/复用托盘与应用图标，返回 ico 路径。"""
     icon_path = GUI_ASSETS_DIR / "icon.ico"
@@ -19,39 +138,14 @@ def ensure_tray_icon() -> str | None:
         return str(icon_path)
 
     try:
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image  # noqa: F401
     except Exception:
         logger.warning("未安装 Pillow，跳过图标生成")
         return None
 
     try:
         GUI_ASSETS_DIR.mkdir(parents=True, exist_ok=True)
-        size = 256
-        image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        mask = Image.new("L", (size, size), 0)
-        ImageDraw.Draw(mask).rounded_rectangle((10, 10, size - 10, size - 10), radius=58, fill=255)
-
-        gradient = Image.new("RGBA", (size, size))
-        gdraw = ImageDraw.Draw(gradient)
-        top = (47, 111, 237)
-        bottom = (24, 70, 184)
-        for y in range(size):
-            ratio = y / (size - 1)
-            color = tuple(int(top[i] + (bottom[i] - top[i]) * ratio) for i in range(3)) + (255,)
-            gdraw.line([(0, y), (size, y)], fill=color)
-        image.paste(gradient, (0, 0), mask)
-
-        font = None
-        for font_name in ("arialbd.ttf", "seguisb.ttf", "msyhbd.ttc"):
-            try:
-                font = ImageFont.truetype(font_name, 138)
-                break
-            except OSError:
-                continue
-        if font is not None:
-            draw = ImageDraw.Draw(image)
-            draw.text((size / 2, size / 2 - 4), "S", font=font, fill=(255, 255, 255, 255), anchor="mm")
-
+        image = _build_icon_image()
         image.save(
             icon_path,
             format="ICO",

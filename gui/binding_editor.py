@@ -15,6 +15,7 @@ from common.binding_store import (
 from gui import theme
 
 sp = theme.sp
+CLOSE_NONE_LABEL = "（不应用）"
 
 
 class BindingEditorDialog(tk.Toplevel):
@@ -22,6 +23,8 @@ class BindingEditorDialog(tk.Toplevel):
         super().__init__(master)
         self.binding = binding
         self.config_names = list(config_names)
+        if binding and binding.close_config and binding.close_config not in self.config_names:
+            self.config_names.append(binding.close_config)
         self.on_saved = on_saved
         self._closed = False
         self._scan_token = 0
@@ -38,19 +41,25 @@ class BindingEditorDialog(tk.Toplevel):
         self.type_var = tk.StringVar(master=self, value=binding.type if binding else BINDING_TYPE_APP)
         self.path_var = tk.StringVar(master=self, value=binding.target if binding else "")
         self.config_var = tk.StringVar(master=self, value=binding.config if binding else (self.config_names[0] if self.config_names else ""))
+        close_value = (binding.close_config if binding and binding.close_config else CLOSE_NONE_LABEL)
+        self.close_config_var = tk.StringVar(master=self, value=close_value)
         self.recursive_var = tk.BooleanVar(master=self, value=binding.recursive if binding else True)
         self.info_var = tk.StringVar(master=self, value="")
 
         self._build()
         self._on_type_changed()
-        theme.center_window(self, master, 660, 430)
+        theme.center_window(self, master, 660, 500)
         self.grab_set()
         self._schedule_scan()
 
     # ------------------------------------------------------------------ 构建界面
 
     def _build(self) -> None:
-        theme.dialog_header(self, "应用绑定", "当指定程序（或文件夹中的程序）启动时，自动应用所选配置").pack(fill="x")
+        theme.dialog_header(
+            self,
+            "应用绑定",
+            "程序启动/退出时自动应用配置；更具体的规则会覆盖上层文件夹规则",
+        ).pack(fill="x")
 
         body = theme.make_card(self)
         body.pack(fill="both", expand=True, padx=sp(16), pady=sp(14))
@@ -86,7 +95,7 @@ class BindingEditorDialog(tk.Toplevel):
         self.btn_browse = ttk.Button(body, text="浏览…", style="Ghost.TButton", command=self._browse)
         self.btn_browse.grid(row=1, column=2, sticky="e", padx=sp((8, 16)), pady=sp(8))
 
-        tk.Label(body, text="应用配置", bg=theme.CARD, fg=theme.TEXT, font=theme.FONT_UI).grid(
+        tk.Label(body, text="启动时应用", bg=theme.CARD, fg=theme.TEXT, font=theme.FONT_UI).grid(
             row=2, column=0, sticky="w", padx=sp((16, 10)), pady=sp(8)
         )
         self.config_combo = ttk.Combobox(
@@ -97,6 +106,24 @@ class BindingEditorDialog(tk.Toplevel):
         )
         self.config_combo.grid(row=2, column=1, columnspan=2, sticky="ew", padx=sp((0, 16)), pady=sp(8))
 
+        tk.Label(body, text="退出后应用", bg=theme.CARD, fg=theme.TEXT, font=theme.FONT_UI).grid(
+            row=3, column=0, sticky="w", padx=sp((16, 10)), pady=sp(8)
+        )
+        self.close_config_combo = ttk.Combobox(
+            body,
+            textvariable=self.close_config_var,
+            values=[CLOSE_NONE_LABEL, *self.config_names],
+            state="readonly",
+        )
+        self.close_config_combo.grid(row=3, column=1, columnspan=2, sticky="ew", padx=sp((0, 16)), pady=sp(8))
+        tk.Label(
+            body,
+            text="可选。程序退出后应用此配置，例如退出游戏后切回桌面配置。",
+            bg=theme.CARD,
+            fg=theme.MUTED,
+            font=theme.FONT_SMALL,
+        ).grid(row=4, column=1, columnspan=2, sticky="w", pady=(0, sp(2)))
+
         self.chk_recursive = ttk.Checkbutton(
             body,
             text="包含子文件夹",
@@ -104,7 +131,7 @@ class BindingEditorDialog(tk.Toplevel):
             style="Card.TCheckbutton",
             command=self._schedule_scan,
         )
-        self.chk_recursive.grid(row=3, column=1, sticky="w", pady=sp((2, 6)))
+        self.chk_recursive.grid(row=5, column=1, sticky="w", pady=sp((2, 6)))
 
         self.info_label = tk.Label(
             body,
@@ -116,7 +143,7 @@ class BindingEditorDialog(tk.Toplevel):
             justify="left",
             wraplength=sp(540),
         )
-        self.info_label.grid(row=4, column=0, columnspan=3, sticky="ew", padx=sp(16), pady=sp((6, 14)))
+        self.info_label.grid(row=6, column=0, columnspan=3, sticky="ew", padx=sp(16), pady=sp((6, 14)))
 
         footer = tk.Frame(self, bg=theme.BG)
         footer.pack(fill="x", padx=sp(16), pady=sp((0, 14)))
@@ -155,7 +182,9 @@ class BindingEditorDialog(tk.Toplevel):
 
         if self.type_var.get() == BINDING_TYPE_APP:
             if target and os.path.exists(target):
-                self.info_var.set(f"目标程序：{os.path.basename(target)}。该程序启动时会自动应用所选配置。")
+                self.info_var.set(
+                    f"目标程序：{os.path.basename(target)}。启动时应用「启动时应用」配置，退出后应用「退出后应用」配置。"
+                )
             else:
                 self.info_var.set("请选择要绑定的程序；也可直接填写进程名（如 game.exe）。")
             return
@@ -200,7 +229,9 @@ class BindingEditorDialog(tk.Toplevel):
             return
         scope = "（含子文件夹）" if recursive else "（不含子文件夹）"
         if count:
-            self.info_var.set(f"该文件夹下检测到 {count} 个可执行文件{scope}，启动其中任意一个都会自动应用配置。")
+            self.info_var.set(
+                f"该文件夹下检测到 {count} 个可执行文件{scope}；启动任意一个时会应用启动配置，退出后应用退出配置。"
+            )
         else:
             self.info_var.set(f"该文件夹下暂未检测到 .exe{scope}，仍可保存绑定。")
 
@@ -210,6 +241,9 @@ class BindingEditorDialog(tk.Toplevel):
         btype = self.type_var.get()
         target = self.path_var.get().strip()
         config = self.config_var.get().strip()
+        close_config = self.close_config_var.get().strip()
+        if close_config == CLOSE_NONE_LABEL:
+            close_config = ""
 
         if not target:
             messagebox.showwarning("缺少路径", "请填写或选择要绑定的程序/文件夹。", parent=self)
@@ -230,12 +264,16 @@ class BindingEditorDialog(tk.Toplevel):
         if config not in self.config_names:
             messagebox.showerror("配置不存在", f"配置 [{config}] 不在配置列表中，请重新选择。", parent=self)
             return
+        if close_config and close_config not in self.config_names:
+            messagebox.showerror("配置不存在", f"退出配置 [{close_config}] 不在配置列表中，请重新选择。", parent=self)
+            return
 
         binding = AppBinding(
             id=self.binding.id if self.binding else uuid.uuid4().hex,
             type=btype,
             target=target,
             config=config,
+            close_config=close_config,
             enabled=self.binding.enabled if self.binding else True,
             recursive=bool(self.recursive_var.get()),
         )

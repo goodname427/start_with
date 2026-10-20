@@ -22,11 +22,17 @@ class AppBinding:
     type: str
     target: str
     config: str
+    close_config: str = ""
     enabled: bool = True
     recursive: bool = True
 
     def display_type(self) -> str:
         return TYPE_LABELS.get(self.type, self.type)
+
+    def display_configs(self) -> str:
+        if self.close_config:
+            return f"{self.config} / 退出后 {self.close_config}"
+        return self.config
 
     def display_target(self) -> str:
         if self.type == BINDING_TYPE_APP:
@@ -36,8 +42,21 @@ class AppBinding:
         return f"{self.target}{suffix}"
 
 
-def new_binding(btype: str, target: str, config: str, recursive: bool = True) -> AppBinding:
-    return AppBinding(id=uuid.uuid4().hex, type=btype, target=target.strip(), config=config.strip(), recursive=recursive)
+def new_binding(
+    btype: str,
+    target: str,
+    config: str,
+    recursive: bool = True,
+    close_config: str = "",
+) -> AppBinding:
+    return AppBinding(
+        id=uuid.uuid4().hex,
+        type=btype,
+        target=target.strip(),
+        config=config.strip(),
+        close_config=close_config.strip(),
+        recursive=recursive,
+    )
 
 
 def load_bindings() -> list[AppBinding]:
@@ -65,6 +84,7 @@ def load_bindings() -> list[AppBinding]:
                 type=btype,
                 target=target,
                 config=config,
+                close_config=str(item.get("close_config", "")).strip(),
                 enabled=bool(item.get("enabled", True)),
                 recursive=bool(item.get("recursive", True)),
             )
@@ -81,6 +101,7 @@ def save_bindings(bindings: list[AppBinding]) -> None:
                 "type": b.type,
                 "target": b.target,
                 "config": b.config,
+                "close_config": b.close_config,
                 "enabled": b.enabled,
                 "recursive": b.recursive,
             }
@@ -122,13 +143,31 @@ def binding_matches(binding: AppBinding, process: ProcessInfo) -> bool:
     return False
 
 
+def _binding_specificity(binding: AppBinding) -> tuple[int, int, int]:
+    """越具体的规则优先级越高：单个应用 > 子文件夹 > 上级文件夹。"""
+    if binding.type == BINDING_TYPE_APP:
+        target = binding.target.strip()
+        # 带完整路径的应用规则比只写进程名更具体
+        return 2, 1 if os.path.dirname(target) else 0, len(target)
+    if binding.type == BINDING_TYPE_FOLDER:
+        return 1, len(_norm(binding.target)), 0
+    return 0, 0, 0
+
+
 def find_matching_binding(bindings: list[AppBinding], process: ProcessInfo) -> AppBinding | None:
-    matched = [b for b in bindings if binding_matches(b, process)]
-    if not matched:
-        return None
-    # 单应用优先，其次匹配路径最长的文件夹（更精确）
-    matched.sort(key=lambda b: (0 if b.type == BINDING_TYPE_APP else 1, -len(b.target)))
-    return matched[0]
+    """按类似 .gitignore 的覆盖规则选择规则：子级覆盖父级，同级时后添加的生效。"""
+    best: AppBinding | None = None
+    best_key: tuple[int, int, int, int] | None = None
+
+    for index, binding in enumerate(bindings):
+        if not binding_matches(binding, process):
+            continue
+        key = (*_binding_specificity(binding), index)
+        if best_key is None or key >= best_key:
+            best = binding
+            best_key = key
+
+    return best
 
 
 def count_folder_executables(folder: str, recursive: bool = True, limit: int = 20000) -> int:
