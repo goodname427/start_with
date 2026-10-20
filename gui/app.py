@@ -123,6 +123,8 @@ class StartWithApp:
         tk.Frame(self.root, bg=theme.BORDER, height=1).pack(side="bottom", fill="x")
 
     def _build_body(self) -> None:
+        self._build_log_panel()
+
         self.notebook = ttk.Notebook(self.root)
         self.notebook.pack(fill="both", expand=True, padx=sp(14), pady=sp((12, 8)))
 
@@ -142,6 +144,62 @@ class StartWithApp:
         )
         self.notebook.add(self.version_panel, text="  版本管理  ")
         self.notebook.bind("<<NotebookTabChanged>>", self._on_tab_changed)
+
+    def _build_log_panel(self) -> None:
+        card = theme.make_card(self.root)
+        card.pack(side="bottom", fill="x", padx=sp(14), pady=sp((0, 8)))
+
+        head = tk.Frame(card, bg=theme.CARD)
+        head.pack(fill="x", padx=sp(14), pady=(sp(8), sp(4)))
+        tk.Label(head, text="运行日志", bg=theme.CARD, fg=theme.TEXT, font=theme.FONT_SECTION).pack(
+            side="left"
+        )
+        tk.Label(
+            head,
+            text="配置应用、绑定触发与版本管理的执行输出",
+            bg=theme.CARD,
+            fg=theme.MUTED,
+            font=theme.FONT_SMALL,
+        ).pack(side="left", padx=sp(10))
+        theme.ghost_button(head, "清空", self._clear_log).pack(side="right")
+        self.btn_toggle_log = theme.ghost_button(head, "收起", self._toggle_log)
+        self.btn_toggle_log.pack(side="right", padx=sp((0, 8)))
+
+        self.log_body = tk.Frame(card, bg=theme.CARD)
+        self.log_body.pack(fill="both", expand=True, padx=sp(14), pady=(0, sp(10)))
+        self.log_body.rowconfigure(0, weight=1)
+        self.log_body.columnconfigure(0, weight=1)
+
+        self.log_text = tk.Text(
+            self.log_body,
+            height=6,
+            bg=theme.LOG_BG,
+            fg=theme.LOG_FG,
+            insertbackground=theme.LOG_FG,
+            font=theme.FONT_MONO,
+            relief="flat",
+            bd=0,
+            padx=sp(10),
+            pady=sp(8),
+            wrap="word",
+            state="disabled",
+        )
+        self.log_text.grid(row=0, column=0, sticky="nsew")
+        log_scroll = ttk.Scrollbar(self.log_body, orient="vertical", command=self.log_text.yview)
+        log_scroll.grid(row=0, column=1, sticky="ns")
+        self.log_text.configure(yscrollcommand=log_scroll.set)
+        self.log_text.tag_configure("info", foreground=theme.LOG_FG)
+        self.log_text.tag_configure("success", foreground="#6ee7a8")
+        self.log_text.tag_configure("error", foreground="#ff9b93")
+
+    def _toggle_log(self) -> None:
+        if self.log_body.winfo_manager():
+            self.log_body.pack_forget()
+            self.btn_toggle_log.configure(text="展开")
+        else:
+            self.log_body.pack(fill="both", expand=True, padx=sp(14), pady=(0, sp(10)))
+            self.btn_toggle_log.configure(text="收起")
+            self.log_text.see("end")
 
     def _on_tab_changed(self, _event=None) -> None:
         try:
@@ -418,8 +476,7 @@ class StartWithApp:
 
     def _build_bindings_page(self) -> None:
         page = self.bindings_page
-        page.rowconfigure(1, weight=3)
-        page.rowconfigure(2, weight=1)
+        page.rowconfigure(1, weight=1)
         page.columnconfigure(0, weight=1)
 
         toolbar = tk.Frame(page, bg=theme.BG)
@@ -449,7 +506,7 @@ class StartWithApp:
         ).pack(side="right", padx=sp((0, 16)))
 
         tree_card = theme.make_card(page)
-        tree_card.grid(row=1, column=0, sticky="nsew", padx=sp(12), pady=sp((0, 10)))
+        tree_card.grid(row=1, column=0, sticky="nsew", padx=sp(12), pady=sp((0, 12)))
         tree_card.rowconfigure(1, weight=1)
         tree_card.columnconfigure(0, weight=1)
 
@@ -497,52 +554,6 @@ class StartWithApp:
         self.binding_tree.bind("<<TreeviewSelect>>", self._on_binding_selected)
         self.binding_tree.bind("<Double-1>", lambda _event: self._edit_binding())
         self.binding_tree.bind("<Delete>", lambda _event: self._delete_binding())
-
-        log_card = theme.make_card(page)
-        log_card.grid(row=2, column=0, sticky="nsew", padx=sp(12), pady=sp((0, 12)))
-        log_card.rowconfigure(1, weight=1)
-        log_card.columnconfigure(0, weight=1)
-
-        log_head = tk.Frame(log_card, bg=theme.CARD)
-        log_head.grid(row=0, column=0, sticky="ew", padx=sp(14), pady=sp((10, 4)))
-        tk.Label(log_head, text="触发日志", bg=theme.CARD, fg=theme.TEXT, font=theme.FONT_SECTION).pack(
-            side="left"
-        )
-        tk.Label(
-            log_head,
-            text="最小化到托盘后仍会继续监听",
-            bg=theme.CARD,
-            fg=theme.MUTED,
-            font=theme.FONT_SMALL,
-        ).pack(side="left", padx=sp((10, 0)))
-        theme.ghost_button(log_head, "清空", self._clear_log).pack(side="right")
-
-        log_wrap = tk.Frame(log_card, bg=theme.CARD)
-        log_wrap.grid(row=1, column=0, sticky="nsew", padx=sp(14), pady=sp((0, 12)))
-        log_wrap.rowconfigure(0, weight=1)
-        log_wrap.columnconfigure(0, weight=1)
-
-        self.log_text = tk.Text(
-            log_wrap,
-            height=6,
-            bg=theme.LOG_BG,
-            fg=theme.LOG_FG,
-            insertbackground=theme.LOG_FG,
-            font=theme.FONT_MONO,
-            relief="flat",
-            bd=0,
-            padx=sp(10),
-            pady=sp(8),
-            wrap="word",
-            state="disabled",
-        )
-        self.log_text.grid(row=0, column=0, sticky="nsew")
-        log_scroll = ttk.Scrollbar(log_wrap, orient="vertical", command=self.log_text.yview)
-        log_scroll.grid(row=0, column=1, sticky="ns")
-        self.log_text.configure(yscrollcommand=log_scroll.set)
-        self.log_text.tag_configure("info", foreground=theme.LOG_FG)
-        self.log_text.tag_configure("success", foreground="#6ee7a8")
-        self.log_text.tag_configure("error", foreground="#ff9b93")
 
     def _refresh_bindings(self, select: str | None = None) -> None:
         current = select
@@ -810,6 +821,7 @@ class StartWithApp:
 
         if ok:
             headline = f"配置 [{name}] 应用完成"
+            self._log_output(output, "info", skip_text=headline)
             self._log(headline, "success")
             self._set_status(headline)
             if self._hidden and self._tray and self.settings.get("notify_on_trigger", True):
@@ -826,8 +838,7 @@ class StartWithApp:
 
         headline = f"配置 [{name}] 应用失败"
         self._log(headline, "error")
-        for line in lines[-6:]:
-            self._log(f"  {line}", "error")
+        self._log_output(output, "error", skip_text=headline)
         self._set_status(headline)
 
         # 优先展示“配置不存在”这类根因，便于定位问题
@@ -1095,6 +1106,16 @@ class StartWithApp:
             self.log_text.configure(state="disabled")
         except tk.TclError:
             pass
+
+    def _log_output(self, output: str, level: str = "info", limit: int = 40, skip_text: str | None = None) -> None:
+        """把子进程输出写入日志面板，避免成功时只显示一行结果。"""
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        if skip_text and lines and lines[-1] == skip_text:
+            lines.pop()
+        for line in lines[:limit]:
+            self._log(f"  {line}", level)
+        if len(lines) > limit:
+            self._log(f"  … 另有 {len(lines) - limit} 行输出", "info")
 
     def _clear_log(self) -> None:
         try:
