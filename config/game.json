@@ -8,10 +8,6 @@
         {
             "action": "switch_audio_device",
             "args": "耳机式麦克风 (INZONE H5 - Chat)"
-        },
-        {
-            "action": "apply_config",
-            "args": "game_screen_only"
         }
     ]
 }

@@ -819,22 +819,30 @@ class StartWithApp:
                     self._tray.notify("配置已应用", f"已应用配置 [{name}]")
             return
 
-        last_line = ""
-        for line in reversed(output.splitlines()):
-            if line.strip():
-                last_line = line.strip()
-                break
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        last_line = lines[-1] if lines else ""
+        error_detail = "\n".join(lines[-6:])
+        logger.error("配置 [%s] 应用失败:\n%s", name, output)
 
         headline = f"配置 [{name}] 应用失败"
-        self._log(headline + (f"：{last_line}" if last_line else ""), "error")
+        self._log(headline, "error")
+        for line in lines[-6:]:
+            self._log(f"  {line}", "error")
         self._set_status(headline)
 
+        # 优先展示“配置不存在”这类根因，便于定位问题
+        short_error = last_line or "未知错误"
+        for line in reversed(lines):
+            if "配置不存在" in line or "not found" in line.lower():
+                short_error = line
+                break
+
         if self._hidden and self._tray:
-            self._tray.notify("应用失败", f"{name}：{last_line or '未知错误'}")
+            self._tray.notify("应用失败", f"{name}：{short_error}")
         elif source != "binding":
             messagebox.showerror(
                 "应用失败",
-                f"配置 [{name}] 应用失败。\n\n{last_line or '未知错误'}",
+                f"配置 [{name}] 应用失败。\n\n{error_detail or '未知错误'}",
                 parent=self.root,
             )
 

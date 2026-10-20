@@ -20,7 +20,18 @@ class ApplyConfigAction(StartWithAction):
         if not self._check_args_is_type(str):
             return False
 
-        if CommandUtils.execute_command(sys.executable, [str(APPLY_SCRIPT), "--config", self.args]).returncode == CMD_RETURN_CODE_SUCCESS:
+        config_file = APPLY_SCRIPT.parent / "config" / f"{self.args}.json"
+        if not config_file.exists():
+            print(f"配置不存在: {config_file}")
+            return False
+
+        result = CommandUtils.execute_command(sys.executable, [str(APPLY_SCRIPT), "--config", self.args])
+        if result.returncode != CMD_RETURN_CODE_SUCCESS:
+            output = (result.stdout or "") + (result.stderr or "")
+            if output.strip():
+                print(output.strip())
+
+        if result.returncode == CMD_RETURN_CODE_SUCCESS:
             print(f"Apply config [{self.args}] success")
             return True
         else:
