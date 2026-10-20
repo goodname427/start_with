@@ -3,6 +3,13 @@ from typing import List
 
 
 class StartWithAction:
+    # GUI 元数据（子类可覆盖）
+    label = "操作"
+    args_label = "参数"
+    args_kind = "text"
+    description = ""
+    order = 100
+
     def __init__(self, args, run_while_prev_action_success=False):
         self.args = args
         self.run_while_prev_action_success = run_while_prev_action_success

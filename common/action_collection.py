@@ -47,6 +47,7 @@ class StartWithActionCollection:
             action_class_name = StartWithActionCollection.__snake_to_pascal(action_module_name)
             if action_class_name not in action_module.__dict__:
                 print(f"Action [{action_module_name}] has no action class")
+                continue
 
             action_class = getattr(action_module, action_class_name)
             if not issubclass(action_class, StartWithAction):
@@ -70,14 +71,19 @@ class StartWithActionCollection:
         self.actions.append(action)
         self.should_run_as_admin = self.should_run_as_admin or action.should_run_as_admin()
 
-    def run(self):
+    def run(self) -> bool:
         if self.should_run_as_admin:
             CommandUtils.require_admin()
 
         prev_action_success = True
+        success = True
         for action in self.actions:
             if action.run_while_prev_action_success and not prev_action_success:
                 prev_action_success = False
                 continue
 
-            prev_action_success = action.run()
+            prev_action_success = bool(action.run())
+            if not prev_action_success:
+                success = False
+
+        return success

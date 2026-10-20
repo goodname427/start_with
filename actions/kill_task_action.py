@@ -5,6 +5,12 @@ from common.command_utils import CommandUtils, CMD_RETURN_CODE_SUCCESS
 
 
 class KillTaskAction(StartWithAction):
+    label = "结束进程"
+    args_label = "进程名称（如 game.exe）"
+    args_kind = "process"
+    description = "强制结束指定名称的进程，应用时需要管理员权限。"
+    order = 30
+
     @override
     def run(self)-> bool:
         if not self._check_args_is_type(str):

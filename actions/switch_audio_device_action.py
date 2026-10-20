@@ -6,8 +6,14 @@ from common.command_utils import CommandUtils, CMD_RETURN_CODE_SUCCESS
 
 
 class SwitchAudioDeviceAction(StartWithAction):
+    label = "切换音频设备"
+    args_label = "音频设备名称"
+    args_kind = "audio_device"
+    description = "将 Windows 默认音频播放设备切换到指定设备。"
+    order = 20
+
     @staticmethod
-    def __get_all_audio_devices() -> list[dict]:
+    def get_all_audio_devices() -> list[dict]:
         """
         Get all audio devices.
         :return: A list of dictionaries, each dictionary contains the device information.
@@ -48,7 +54,7 @@ class SwitchAudioDeviceAction(StartWithAction):
         :param device_name: The name of the audio device to switch to.
         :return: True if the switch is successful, False otherwise.
         """
-        devices = SwitchAudioDeviceAction.__get_all_audio_devices()
+        devices = SwitchAudioDeviceAction.get_all_audio_devices()
 
         for device in devices:
             if device["Name"] == device_name:

@@ -1,4 +1,5 @@
 import ctypes
+import os
 import subprocess
 import sys
 
@@ -16,7 +17,7 @@ class CommandUtils:
         ]
 
         try:
-            return subprocess.run(combined, capture_output=True, text=True)
+            return subprocess.run(combined, capture_output=True, text=True, errors="replace")
         except Exception as e:
             print(f"Error when executing command [{combined}]: {e}")
             return subprocess.CompletedProcess(combined, CMD_RETURN_CODE_ERROR, "", str(e))
@@ -29,7 +30,13 @@ class CommandUtils:
         ]
 
         try:
-            return subprocess.Popen(combined, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            return subprocess.Popen(
+                combined,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                errors="replace",
+            )
         except Exception as e:
             print(f"Error when opening command [{combined}]: {e}")
             return None
@@ -47,12 +54,14 @@ class CommandUtils:
             print("Run as admin")
             return
 
+        script = os.path.abspath(sys.argv[0]) if sys.argv else ""
+        params = subprocess.list2cmdline([script, *sys.argv[1:]]) if script else ""
         ctypes.windll.shell32.ShellExecuteW(
             None,
             "runas",
             sys.executable,
-            " ".join(sys.argv),
-            None,
+            params,
+            os.path.dirname(script) if script else None,
             1
         )
         sys.exit()
