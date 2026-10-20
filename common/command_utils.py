@@ -1,4 +1,5 @@
 import ctypes
+import ctypes.wintypes as wt
 import os
 import subprocess
 import sys
@@ -7,6 +8,29 @@ CMD_RETURN_CODE_SUCCESS = 0
 CMD_RETURN_CODE_ERROR = -1
 # GUI 以 pythonw 运行时没有控制台，子进程默认会弹出一个新控制台窗口；统一隐藏
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+
+SEE_MASK_NOCLOSEPROCESS = 0x00000040
+SEE_MASK_NOASYNC = 0x00000100
+
+
+class _SHELLEXECUTEINFOW(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wt.DWORD),
+        ("fMask", ctypes.c_ulong),
+        ("hwnd", wt.HWND),
+        ("lpVerb", wt.LPCWSTR),
+        ("lpFile", wt.LPCWSTR),
+        ("lpParameters", wt.LPCWSTR),
+        ("lpDirectory", wt.LPCWSTR),
+        ("nShow", ctypes.c_int),
+        ("hInstApp", wt.HINSTANCE),
+        ("lpIDList", ctypes.c_void_p),
+        ("lpClass", wt.LPCWSTR),
+        ("hkeyClass", wt.HKEY),
+        ("dwHotKey", wt.DWORD),
+        ("hIcon", wt.HANDLE),
+        ("hProcess", wt.HANDLE),
+    ]
 
 class CommandUtils:
     has_run_as_admin = False
@@ -76,9 +100,32 @@ class CommandUtils:
             executable = pythonw
 
         shell32 = ctypes.windll.shell32
-        shell32.ShellExecuteW.restype = ctypes.c_void_p
-        result = shell32.ShellExecuteW(None, "runas", executable, params, workdir, 1)
-        if not result or int(result) <= 32:
+        shell32.ShellExecuteExW.argtypes = [ctypes.POINTER(_SHELLEXECUTEINFOW)]
+        shell32.ShellExecuteExW.restype = wt.BOOL
+
+        info = _SHELLEXECUTEINFOW()
+        info.cbSize = ctypes.sizeof(_SHELLEXECUTEINFOW)
+        info.fMask = SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC
+        info.lpVerb = "runas"
+        info.lpFile = executable
+        info.lpParameters = params
+        info.lpDirectory = workdir
+        info.nShow = 1
+
+        if not shell32.ShellExecuteExW(ctypes.byref(info)):
             print("需要管理员权限，但未获得授权，操作已取消。")
             sys.exit(1)
-        sys.exit(0)
+        if not info.hProcess:
+            sys.exit(0)
+
+        # 等待提权后的进程执行完，保证调用方能拿到真实的执行结果
+        kernel32 = ctypes.windll.kernel32
+        kernel32.WaitForSingleObject.argtypes = [wt.HANDLE, wt.DWORD]
+        kernel32.WaitForSingleObject.restype = wt.DWORD
+        kernel32.GetExitCodeProcess.argtypes = [wt.HANDLE, ctypes.POINTER(wt.DWORD)]
+        kernel32.GetExitCodeProcess.restype = wt.BOOL
+        kernel32.WaitForSingleObject(info.hProcess, 0xFFFFFFFF)
+        exit_code = wt.DWORD()
+        kernel32.GetExitCodeProcess(info.hProcess, ctypes.byref(exit_code))
+        kernel32.CloseHandle(info.hProcess)
+        sys.exit(exit_code.value)

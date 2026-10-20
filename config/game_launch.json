@@ -1,0 +1,17 @@
+{
+    "actions":
+    [
+        {
+            "action": "apply_config",
+            "args": "game"
+        },
+        {
+            "action": "leigod_acc",
+            "args": "{acc_game}"
+        },
+        {
+            "action": "run_app",
+            "args": "{launch_path}"
+        }
+    ]
+}

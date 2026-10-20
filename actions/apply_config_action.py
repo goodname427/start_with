@@ -25,7 +25,10 @@ class ApplyConfigAction(StartWithAction):
             print(f"配置不存在: {config_file}")
             return False
 
-        result = CommandUtils.execute_command(sys.executable, [str(APPLY_SCRIPT), "--config", self.args])
+        command_args = [str(APPLY_SCRIPT), "--config", self.args]
+        for key, value in getattr(self, "variables", {}).items():
+            command_args.extend(["--var", f"{key}={value}"])
+        result = CommandUtils.execute_command(sys.executable, command_args)
         if result.returncode != CMD_RETURN_CODE_SUCCESS:
             output = (result.stdout or "") + (result.stderr or "")
             if output.strip():

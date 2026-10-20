@@ -1,6 +1,7 @@
 """应用绑定编辑对话框：单个应用 / 文件夹批量绑定。"""
 import os
 import queue
+import re
 import threading
 import tkinter as tk
 import uuid
@@ -16,6 +17,7 @@ from gui import theme
 
 sp = theme.sp
 CLOSE_NONE_LABEL = "（不应用）"
+CONFIG_NONE_LABEL = "（不应用）"
 
 
 class BindingEditorDialog(tk.Toplevel):
@@ -40,15 +42,20 @@ class BindingEditorDialog(tk.Toplevel):
 
         self.type_var = tk.StringVar(master=self, value=binding.type if binding else BINDING_TYPE_APP)
         self.path_var = tk.StringVar(master=self, value=binding.target if binding else "")
-        self.config_var = tk.StringVar(master=self, value=binding.config if binding else (self.config_names[0] if self.config_names else ""))
+        config_value = binding.config if binding and binding.config else CONFIG_NONE_LABEL
+        self.config_var = tk.StringVar(master=self, value=config_value)
         close_value = (binding.close_config if binding and binding.close_config else CLOSE_NONE_LABEL)
         self.close_config_var = tk.StringVar(master=self, value=close_value)
+        launch_value = (binding.launch_config if binding and binding.launch_config else CONFIG_NONE_LABEL)
+        self.launch_config_var = tk.StringVar(master=self, value=launch_value)
+        params = binding.params if binding else {}
+        self.params_text_content = "\n".join(f"{key}={value}" for key, value in params.items())
         self.recursive_var = tk.BooleanVar(master=self, value=binding.recursive if binding else True)
         self.info_var = tk.StringVar(master=self, value="")
 
         self._build()
         self._on_type_changed()
-        theme.center_window(self, master, 660, 500)
+        theme.center_window(self, master, 720, 640)
         self.grab_set()
         self._schedule_scan()
 
@@ -58,7 +65,7 @@ class BindingEditorDialog(tk.Toplevel):
         theme.dialog_header(
             self,
             "应用绑定",
-            "程序启动/退出时自动应用配置；更具体的规则会覆盖上层文件夹规则",
+            "启动/退出时自动应用配置；「启动」会应用绑定的启动配置，参数由绑定提供",
         ).pack(fill="x")
 
         body = theme.make_card(self)
@@ -95,19 +102,59 @@ class BindingEditorDialog(tk.Toplevel):
         self.btn_browse = ttk.Button(body, text="浏览…", style="Ghost.TButton", command=self._browse)
         self.btn_browse.grid(row=1, column=2, sticky="e", padx=sp((8, 16)), pady=sp(8))
 
+        config_values = [CONFIG_NONE_LABEL, *self.config_names]
+
+        tk.Label(body, text="启动配置", bg=theme.CARD, fg=theme.TEXT, font=theme.FONT_UI).grid(
+            row=2, column=0, sticky="w", padx=sp((16, 10)), pady=sp(6)
+        )
+        self.launch_config_combo = ttk.Combobox(
+            body,
+            textvariable=self.launch_config_var,
+            values=config_values,
+            state="readonly",
+        )
+        self.launch_config_combo.grid(
+            row=2, column=1, columnspan=2, sticky="ew", padx=sp((0, 16)), pady=sp(6)
+        )
+
+        tk.Label(body, text="启动参数", bg=theme.CARD, fg=theme.TEXT, font=theme.FONT_UI).grid(
+            row=3, column=0, sticky="nw", padx=sp((16, 10)), pady=sp(6)
+        )
+        self.params_text = tk.Text(
+            body,
+            height=3,
+            bg=theme.BG,
+            fg=theme.TEXT,
+            font=theme.FONT_MONO,
+            relief="solid",
+            bd=1,
+            padx=sp(6),
+            pady=sp(4),
+        )
+        self.params_text.grid(row=3, column=1, columnspan=2, sticky="ew", padx=sp((0, 16)), pady=sp(6))
+        self.params_text.insert("1.0", self.params_text_content)
+
+        tk.Label(
+            body,
+            text="每行一个 key=value；启动配置的动作参数用 {key} 引用，例如 leigod_acc 的参数写 {game_name}。",
+            bg=theme.CARD,
+            fg=theme.MUTED,
+            font=theme.FONT_SMALL,
+        ).grid(row=4, column=1, columnspan=2, sticky="w", pady=(0, sp(2)))
+
         tk.Label(body, text="启动时应用", bg=theme.CARD, fg=theme.TEXT, font=theme.FONT_UI).grid(
-            row=2, column=0, sticky="w", padx=sp((16, 10)), pady=sp(8)
+            row=5, column=0, sticky="w", padx=sp((16, 10)), pady=sp(6)
         )
         self.config_combo = ttk.Combobox(
             body,
             textvariable=self.config_var,
-            values=self.config_names,
-            state="readonly" if self.config_names else "disabled",
+            values=config_values,
+            state="readonly",
         )
-        self.config_combo.grid(row=2, column=1, columnspan=2, sticky="ew", padx=sp((0, 16)), pady=sp(8))
+        self.config_combo.grid(row=5, column=1, columnspan=2, sticky="ew", padx=sp((0, 16)), pady=sp(6))
 
         tk.Label(body, text="退出后应用", bg=theme.CARD, fg=theme.TEXT, font=theme.FONT_UI).grid(
-            row=3, column=0, sticky="w", padx=sp((16, 10)), pady=sp(8)
+            row=6, column=0, sticky="w", padx=sp((16, 10)), pady=sp(6)
         )
         self.close_config_combo = ttk.Combobox(
             body,
@@ -115,14 +162,7 @@ class BindingEditorDialog(tk.Toplevel):
             values=[CLOSE_NONE_LABEL, *self.config_names],
             state="readonly",
         )
-        self.close_config_combo.grid(row=3, column=1, columnspan=2, sticky="ew", padx=sp((0, 16)), pady=sp(8))
-        tk.Label(
-            body,
-            text="可选。程序退出后应用此配置，例如退出游戏后切回桌面配置。",
-            bg=theme.CARD,
-            fg=theme.MUTED,
-            font=theme.FONT_SMALL,
-        ).grid(row=4, column=1, columnspan=2, sticky="w", pady=(0, sp(2)))
+        self.close_config_combo.grid(row=6, column=1, columnspan=2, sticky="ew", padx=sp((0, 16)), pady=sp(6))
 
         self.chk_recursive = ttk.Checkbutton(
             body,
@@ -131,7 +171,7 @@ class BindingEditorDialog(tk.Toplevel):
             style="Card.TCheckbutton",
             command=self._schedule_scan,
         )
-        self.chk_recursive.grid(row=5, column=1, sticky="w", pady=sp((2, 6)))
+        self.chk_recursive.grid(row=7, column=1, sticky="w", pady=sp((2, 6)))
 
         self.info_label = tk.Label(
             body,
@@ -141,9 +181,9 @@ class BindingEditorDialog(tk.Toplevel):
             font=theme.FONT_SMALL,
             anchor="w",
             justify="left",
-            wraplength=sp(540),
+            wraplength=sp(620),
         )
-        self.info_label.grid(row=6, column=0, columnspan=3, sticky="ew", padx=sp(16), pady=sp((6, 14)))
+        self.info_label.grid(row=8, column=0, columnspan=3, sticky="ew", padx=sp(16), pady=sp((6, 14)))
 
         footer = tk.Frame(self, bg=theme.BG)
         footer.pack(fill="x", padx=sp(16), pady=sp((0, 14)))
@@ -240,10 +280,38 @@ class BindingEditorDialog(tk.Toplevel):
     def _save(self) -> None:
         btype = self.type_var.get()
         target = self.path_var.get().strip()
+        launch_config = self.launch_config_var.get().strip()
+        if launch_config == CONFIG_NONE_LABEL:
+            launch_config = ""
         config = self.config_var.get().strip()
+        if config == CONFIG_NONE_LABEL:
+            config = ""
         close_config = self.close_config_var.get().strip()
         if close_config == CLOSE_NONE_LABEL:
             close_config = ""
+
+        params: dict[str, str] = {}
+        for line_no, raw_line in enumerate(self.params_text.get("1.0", "end").splitlines(), 1):
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            key, separator, value = line.partition("=")
+            key = key.strip()
+            if not separator or not key:
+                messagebox.showerror(
+                    "启动参数格式错误",
+                    f"第 {line_no} 行应为 key=value：\n{raw_line.strip()}",
+                    parent=self,
+                )
+                return
+            if not re.fullmatch(r"[A-Za-z0-9_.-]+", key):
+                messagebox.showerror(
+                    "启动参数格式错误",
+                    f"参数名只能包含字母、数字、下划线、点和短横线：{key}",
+                    parent=self,
+                )
+                return
+            params[key] = value.strip()
 
         if not target:
             messagebox.showwarning("缺少路径", "请填写或选择要绑定的程序/文件夹。", parent=self)
@@ -258,14 +326,26 @@ class BindingEditorDialog(tk.Toplevel):
                 parent=self,
             ):
                 return
-        if not config:
-            messagebox.showwarning("缺少配置", "请选择要应用的配置。", parent=self)
-            return
-        if config not in self.config_names:
-            messagebox.showerror("配置不存在", f"配置 [{config}] 不在配置列表中，请重新选择。", parent=self)
-            return
-        if close_config and close_config not in self.config_names:
-            messagebox.showerror("配置不存在", f"退出配置 [{close_config}] 不在配置列表中，请重新选择。", parent=self)
+
+        for name, label in (
+            (launch_config, "启动配置"),
+            (config, "启动时应用"),
+            (close_config, "退出后应用"),
+        ):
+            if name and name not in self.config_names:
+                messagebox.showerror(
+                    "配置不存在",
+                    f"{label} [{name}] 不在配置列表中，请重新选择。",
+                    parent=self,
+                )
+                return
+
+        if not (launch_config or config or close_config):
+            messagebox.showwarning(
+                "缺少动作",
+                "请至少设置启动配置、启动时应用或退出后应用中的一项。",
+                parent=self,
+            )
             return
 
         binding = AppBinding(
@@ -276,6 +356,8 @@ class BindingEditorDialog(tk.Toplevel):
             close_config=close_config,
             enabled=self.binding.enabled if self.binding else True,
             recursive=bool(self.recursive_var.get()),
+            launch_config=launch_config,
+            params=params,
         )
 
         callback = self.on_saved

@@ -9,6 +9,7 @@ GUI_ASSETS_DIR = APP_ROOT / "gui" / "assets"
 SETTINGS_FILE = DATA_DIR / "settings.json"
 BINDINGS_FILE = DATA_DIR / "bindings.json"
 LOG_FILE = DATA_DIR / "app.log"
+ACC_LOG_FILE = DATA_DIR / "accelerator.log"
 APPLY_SCRIPT = APP_ROOT / "apply_config.py"
 
 

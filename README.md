@@ -54,7 +54,7 @@ python start_with_gui.py
 
 在「配置文件」页可以：
 
-- **新建配置**：填写名称后，用图形界面添加操作（运行程序、切换音频设备、结束进程、应用其他配置、等待）
+- **新建配置**：填写名称后，用图形界面添加操作（运行程序、切换音频设备、结束进程、应用其他配置、等待、雷神加速）
 - **修改配置**：双击配置或点击「编辑」，可调整操作参数与执行顺序
 - **应用配置**：选中后点击「▶ 应用配置」，等同于执行 `python apply_config.py -c <名称>`
 
@@ -126,6 +126,43 @@ python apply_config.py -c game
 - 后台监听可整体暂停，暂停后不再触发任何绑定
 
 绑定数据保存在 `data/bindings.json`，设置保存在 `data/settings.json`。
+
+### 先加速再启动（参数化配置）
+
+加速器只是一个普通操作（`leigod_acc`），放在配置的动作列表里；不同应用只需要在绑定里提供不同的参数，不用复制配置。
+
+示例配置 `config/game_launch.json`：
+
+```json
+{
+    "actions": [
+        { "action": "apply_config", "args": "game" },
+        { "action": "leigod_acc", "args": "{acc_game}" },
+        { "action": "run_app", "args": "{launch_path}" }
+    ]
+}
+```
+
+在「应用绑定」页编辑绑定：
+
+- **启动配置**：选择 `game_launch`
+- **启动参数**：每行一个 `key=value`
+  ```text
+  acc_game=Big Walk
+  launch_path=steam://rungameid/123456
+  ```
+- 点击「▶ 启动」或托盘菜单「启动绑定」，会按配置顺序执行：
+  1. 应用 `game` 配置（切换耳机等）
+  2. `leigod_acc` 启动雷神、打开「我的加速」中的 `Big Walk` 并等待出现「加速中」
+  3. `run_app` 启动 `launch_path`
+
+说明：
+
+- 配置里用 `{key}` 引用绑定参数；`apply_config` 嵌套调用会把参数继续传给子配置
+- `leigod_acc` 的参数就是游戏名称，可写成 `{acc_game}`，也支持 `名称|超时秒数`（默认 120 秒）
+- 游戏需要先加入雷神的「我的加速」列表（在雷神中打开一次即可）
+- `leigod_acc` 需要管理员权限，应用配置时会弹出 UAC 授权；以管理员身份运行 `gui.bat` 可避免重复提示
+- 雷神界面改版后自动化可能失效，届时只需调整 `common/leigod_driver.py` 中的控件名称
 
 ## 配置版本管理（Git）
 

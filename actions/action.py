@@ -13,6 +13,8 @@ class StartWithAction:
     def __init__(self, args, run_while_prev_action_success=False):
         self.args = args
         self.run_while_prev_action_success = run_while_prev_action_success
+        # 由 StartWithActionCollection 注入的绑定参数，供嵌套配置继续传递
+        self.variables: dict[str, str] = {}
 
     def run(self)->bool:
         return True

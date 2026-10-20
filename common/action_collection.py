@@ -1,5 +1,6 @@
 import importlib
 import json
+import re
 
 from actions.action import StartWithAction
 from common.command_utils import CommandUtils
@@ -7,6 +8,20 @@ from common.command_utils import CommandUtils
 actions_module = importlib.import_module("actions")
 
 ACTION_MODULE_NAME_SUBFIX = "_action"
+PLACEHOLDER_PATTERN = re.compile(r"\{([A-Za-z0-9_.-]+)\}")
+
+
+def substitute_variables(value, variables: dict[str, str] | None):
+    """把字符串中的 {key} 替换为绑定提供的参数，未提供的占位符保持原样。"""
+    if not variables or not isinstance(value, str):
+        return value
+
+    def replace(match):
+        key = match.group(1)
+        return variables.get(key, match.group(0))
+
+    return PLACEHOLDER_PATTERN.sub(replace, value)
+
 
 class StartWithActionCollection:
     @staticmethod
@@ -17,8 +32,9 @@ class StartWithActionCollection:
         return ''.join(word.capitalize() for word in words)
 
     @staticmethod
-    def parse(text:str):
+    def parse(text: str, variables: dict[str, str] | None = None):
         collection = StartWithActionCollection()
+        collection.variables = dict(variables or {})
 
         try:
             json_object = json.loads(text)
@@ -54,7 +70,11 @@ class StartWithActionCollection:
                 print(f"Action class [{action_module_name}] does not inherit from StartWithAction")
                 continue
 
-            action = action_class(action_desc["args"])
+            action_args = substitute_variables(action_desc["args"], variables)
+            if isinstance(action_args, str) and PLACEHOLDER_PATTERN.search(action_args):
+                print(f"Warning: 参数 [{action_args}] 含未提供的占位符，请通过 --var 或绑定参数传入")
+            action = action_class(action_args)
+            action.variables = dict(variables or {})
 
             if "run_while_prev_action_success" in action_desc:
                 action.run_while_prev_action_success = action_desc["run_while_prev_action_success"]

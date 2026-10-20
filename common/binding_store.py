@@ -3,7 +3,7 @@ import json
 import os
 import threading
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from common.paths import BINDINGS_FILE, ensure_dirs
@@ -25,14 +25,34 @@ class AppBinding:
     close_config: str = ""
     enabled: bool = True
     recursive: bool = True
+    # 手动启动时应用的配置；配置内的动作参数可以用 {key} 由 params 填充
+    launch_config: str = ""
+    params: dict[str, str] = field(default_factory=dict)
 
     def display_type(self) -> str:
         return TYPE_LABELS.get(self.type, self.type)
 
     def display_configs(self) -> str:
+        parts: list[str] = []
+        if self.launch_config:
+            parts.append(f"启动 {self.launch_config}")
+        if self.config:
+            parts.append(self.config)
         if self.close_config:
-            return f"{self.config} / 退出后 {self.close_config}"
-        return self.config
+            parts.append(f"退出后 {self.close_config}")
+        return " / ".join(parts) or "—"
+
+    def display_launch(self) -> str:
+        if not self.launch_config:
+            return "—"
+        if not self.params:
+            return self.launch_config
+        return f"{self.launch_config}（{len(self.params)} 个参数）"
+
+    def display_params(self) -> str:
+        if not self.params:
+            return "—"
+        return "，".join(f"{key}={value}" for key, value in self.params.items())
 
     def display_target(self) -> str:
         if self.type == BINDING_TYPE_APP:
@@ -48,6 +68,8 @@ def new_binding(
     config: str,
     recursive: bool = True,
     close_config: str = "",
+    launch_config: str = "",
+    params: dict[str, str] | None = None,
 ) -> AppBinding:
     return AppBinding(
         id=uuid.uuid4().hex,
@@ -56,6 +78,8 @@ def new_binding(
         config=config.strip(),
         close_config=close_config.strip(),
         recursive=recursive,
+        launch_config=launch_config.strip(),
+        params=dict(params or {}),
     )
 
 
@@ -76,7 +100,18 @@ def load_bindings() -> list[AppBinding]:
         btype = str(item.get("type", "")).strip()
         target = str(item.get("target", "")).strip()
         config = str(item.get("config", "")).strip()
-        if btype not in TYPE_LABELS or not target or not config:
+        close_config = str(item.get("close_config", "")).strip()
+        launch_config = str(item.get("launch_config", "")).strip()
+        params: dict[str, str] = {}
+        raw_params = item.get("params")
+        if isinstance(raw_params, dict):
+            for key, value in raw_params.items():
+                key_text = str(key).strip()
+                if key_text:
+                    params[key_text] = str(value)
+        if btype not in TYPE_LABELS or not target:
+            continue
+        if not (config or close_config or launch_config):
             continue
         bindings.append(
             AppBinding(
@@ -84,9 +119,11 @@ def load_bindings() -> list[AppBinding]:
                 type=btype,
                 target=target,
                 config=config,
-                close_config=str(item.get("close_config", "")).strip(),
+                close_config=close_config,
                 enabled=bool(item.get("enabled", True)),
                 recursive=bool(item.get("recursive", True)),
+                launch_config=launch_config,
+                params=params,
             )
         )
     return bindings
@@ -104,6 +141,8 @@ def save_bindings(bindings: list[AppBinding]) -> None:
                 "close_config": b.close_config,
                 "enabled": b.enabled,
                 "recursive": b.recursive,
+                "launch_config": b.launch_config,
+                "params": b.params,
             }
             for b in bindings
         ],
