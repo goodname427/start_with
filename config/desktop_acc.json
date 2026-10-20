@@ -1,0 +1,13 @@
+{
+    "actions":
+    [
+        {
+            "action": "leigod_stop",
+            "args": "quit"
+        },
+        {
+            "action": "apply_config",
+            "args": "desktop"
+        }
+    ]
+}

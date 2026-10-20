@@ -5,6 +5,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 from datetime import datetime
 from tkinter import messagebox, ttk
@@ -14,6 +15,7 @@ from common.action_meta import get_definition_map
 from common.binding_store import AppBinding
 from common.binding_watcher import BindingWatcher
 from common.paths import ACC_LOG_FILE, APP_ROOT, APPLY_SCRIPT, CONFIG_DIR
+from common.process_meta import build_context
 from gui import theme
 from gui.binding_editor import BindingEditorDialog
 from gui.config_editor import ConfigEditorDialog
@@ -489,8 +491,6 @@ class StartWithApp:
         self.btn_delete_binding.pack(side="left", padx=sp((8, 0)))
         self.btn_toggle_binding = theme.ghost_button(toolbar, "启用 / 停用", self._toggle_binding)
         self.btn_toggle_binding.pack(side="left", padx=sp((8, 0)))
-        self.btn_launch_binding = theme.ghost_button(toolbar, "▶ 启动", self._launch_selected_binding)
-        self.btn_launch_binding.pack(side="left", padx=sp((16, 0)))
 
         self.autostart_var = tk.BooleanVar(master=self.root, value=autostart.is_enabled())
         ttk.Checkbutton(
@@ -520,7 +520,7 @@ class StartWithApp:
         self.binding_count_label.pack(side="left")
         tk.Label(
             head,
-            text="启动/退出时自动应用配置；「启动」会应用绑定的启动配置，参数由绑定提供",
+            text="启动/退出时自动应用配置；动作会自动读取当前启动的 exe 信息",
             bg=theme.CARD,
             fg=theme.MUTED,
             font=theme.FONT_SMALL,
@@ -533,17 +533,16 @@ class StartWithApp:
 
         self.binding_tree = ttk.Treeview(
             binding_wrap,
-            columns=("state", "type", "target", "launch", "config", "close"),
+            columns=("state", "type", "target", "config", "close"),
             show="headings",
             selectmode="browse",
         )
         binding_columns = (
             ("state", "状态", sp(66), "center", False, sp(56)),
             ("type", "类型", sp(84), "center", False, sp(64)),
-            ("target", "目标", sp(300), "w", True, sp(160)),
-            ("launch", "启动配置", sp(150), "w", False, sp(110)),
-            ("config", "启动时", sp(120), "w", False, sp(90)),
-            ("close", "退出后", sp(110), "w", False, sp(90)),
+            ("target", "目标", sp(420), "w", True, sp(180)),
+            ("config", "启动时", sp(128), "w", False, sp(96)),
+            ("close", "退出后", sp(128), "w", False, sp(96)),
         )
         for key, title, width, anchor, stretch, minwidth in binding_columns:
             self.binding_tree.heading(key, text=title)
@@ -567,32 +566,21 @@ class StartWithApp:
         self.bindings = binding_store.load_bindings()
         self.binding_tree.delete(*self.binding_tree.get_children())
         for binding in self.bindings:
-            missing = bool(binding.config) and not config_store.config_path(binding.config).exists()
-            missing_launch = bool(binding.launch_config) and not config_store.config_path(binding.launch_config).exists()
+            missing = not config_store.config_path(binding.config).exists()
             missing_close = bool(binding.close_config) and not config_store.config_path(binding.close_config).exists()
             state = "启用" if binding.enabled else "已停用"
-
-            launch_text = binding.display_launch() + ("  ⚠" if missing_launch else "")
-            config_text = (binding.config + ("  ⚠" if missing else "")) if binding.config else "—"
+            config_text = binding.config + ("  ⚠" if missing else "")
             close_text = (binding.close_config + ("  ⚠" if missing_close else "")) if binding.close_config else "—"
-
             tags = []
             if not binding.enabled:
                 tags.append("disabled")
-            if missing or missing_launch or missing_close:
+            if missing or missing_close:
                 tags.append("missing")
             self.binding_tree.insert(
                 "",
                 "end",
                 iid=binding.id,
-                values=(
-                    state,
-                    binding.display_type(),
-                    binding.display_target(),
-                    launch_text,
-                    config_text,
-                    close_text,
-                ),
+                values=(state, binding.display_type(), binding.display_target(), config_text, close_text),
                 tags=tuple(tags),
             )
 
@@ -616,21 +604,17 @@ class StartWithApp:
         return next((b for b in self.bindings if b.id == selection[0]), None)
 
     def _on_binding_selected(self, _event=None) -> None:
-        binding = self._selected_binding()
-        has_selection = binding is not None
+        has_selection = self._selected_binding() is not None
         state = "normal" if has_selection else "disabled"
         for button in (self.btn_edit_binding, self.btn_delete_binding, self.btn_toggle_binding):
             button.configure(state=state)
-
-        can_launch = bool(binding and binding.launch_config)
-        self.btn_launch_binding.configure(state="normal" if can_launch else "disabled")
 
     def _new_binding(self) -> None:
         config_names = self._available_config_names()
         if not config_names:
             messagebox.showinfo(
                 "暂无配置",
-                "请先在「配置文件」页创建至少一个配置（例如 game_launch）。",
+                "请先在「配置文件」页创建至少一个配置（例如 game_acc）。",
                 parent=self.root,
             )
             return
@@ -656,7 +640,7 @@ class StartWithApp:
         if binding is None:
             return
         config_names = self._available_config_names()
-        for name in (binding.launch_config, binding.config, binding.close_config):
+        for name in (binding.config, binding.close_config):
             if name and name not in config_names:
                 config_names.append(name)
 
@@ -710,48 +694,6 @@ class StartWithApp:
             return
         self._refresh_bindings(select=select)
         self._set_status(f"应用绑定已更新（{len(self.bindings)} 条）")
-
-    # ------------------------------------------------------------------ 启动绑定
-
-    def _launch_selected_binding(self) -> None:
-        binding = self._selected_binding()
-        if binding is None:
-            return
-        self._start_binding_launch(binding)
-
-    def _start_binding_launch_by_id(self, binding_id: str) -> None:
-        binding = next((b for b in self.bindings if b.id == binding_id), None)
-        if binding is None:
-            self.bindings = binding_store.load_bindings()
-            self._refresh_bindings()
-            binding = next((b for b in self.bindings if b.id == binding_id), None)
-        if binding is None:
-            self._log("绑定不存在，可能已被删除。", "error")
-            return
-        self._start_binding_launch(binding)
-
-    def _start_binding_launch(self, binding: AppBinding) -> None:
-        current = next((b for b in self.bindings if b.id == binding.id), None)
-        if current is None or not current.enabled:
-            return
-        if not current.launch_config:
-            self._log(f"绑定 [{current.display_target()}] 未设置启动配置。", "error")
-            return
-        if not config_store.config_path(current.launch_config).exists():
-            self._log(f"启动配置 [{current.launch_config}] 不存在。", "error")
-            return
-
-        self._log(
-            f"启动绑定：{current.display_target()} → 配置 [{current.launch_config}]"
-            + (f"（参数：{current.display_params()}）" if current.params else ""),
-            "info",
-        )
-        self.apply_config(
-            current.launch_config,
-            source="binding_launch",
-            detail=current.display_target(),
-            variables=current.params,
-        )
 
     # ------------------------------------------------------------------ 监听
 
@@ -812,7 +754,7 @@ class StartWithApp:
             current.config,
             source="binding",
             detail=process.name,
-            variables=current.params,
+            variables=build_context(current, process),
         )
 
     def _handle_close_trigger(self, payload: dict) -> None:
@@ -833,7 +775,7 @@ class StartWithApp:
             current.close_config,
             source="binding",
             detail=f"{process.name} 已退出",
-            variables=current.params,
+            variables=build_context(current, process),
         )
 
     def apply_config(
@@ -907,9 +849,8 @@ class StartWithApp:
         source = payload.get("source", "manual")
         detail = payload.get("detail")
 
-        label = "启动配置" if source == "binding_launch" else "配置"
-        if source == "binding_launch":
-            self._log_accelerator_output()
+        label = "配置"
+        self._log_accelerator_output()
 
         if ok:
             headline = f"{label} [{name}] 应用完成"
@@ -919,8 +860,6 @@ class StartWithApp:
             if self._hidden and self._tray and self.settings.get("notify_on_trigger", True):
                 if source == "binding":
                     self._tray.notify("配置已应用", f"{detail or '进程'} → {name}")
-                elif source == "binding_launch":
-                    self._tray.notify("启动配置已执行", detail or name)
                 else:
                     self._tray.notify("配置已应用", f"已应用配置 [{name}]")
             return
@@ -1040,27 +979,11 @@ class StartWithApp:
         if not edit_items:
             edit_items = [{"label": "（暂无配置）", "enabled": False}]
 
-        try:
-            bindings = binding_store.load_bindings()
-        except Exception:
-            bindings = []
-        launch_items = []
-        for binding in bindings:
-            if not binding.enabled or not binding.launch_config:
-                continue
-            target_name = os.path.basename(binding.target.rstrip("\\/")) or binding.target
-            launch_items.append(
-                {"label": f"{target_name} · {binding.launch_config}", "key": f"launch:{binding.id}"}
-            )
-        if not launch_items:
-            launch_items = [{"label": "（暂无启动绑定）", "enabled": False}]
-
         return [
             {"label": "打开控制面板", "key": "open"},
             {"label": "新建配置…", "key": "new_config"},
             {"separator": True},
             {"label": "应用配置", "children": config_items},
-            {"label": "启动绑定", "children": launch_items},
             {"label": "编辑配置", "children": edit_items},
             {"separator": True},
             {
@@ -1083,8 +1006,6 @@ class StartWithApp:
             self._new_config()
         elif key.startswith("apply:"):
             self.apply_config(key.split(":", 1)[1], source="tray")
-        elif key.startswith("launch:"):
-            self._start_binding_launch_by_id(key.split(":", 1)[1])
         elif key.startswith("edit:"):
             self.show_window()
             self._open_config_editor_by_name(key.split(":", 1)[1])
@@ -1231,6 +1152,8 @@ class StartWithApp:
 
     def _log_accelerator_output(self, limit: int = 15) -> None:
         try:
+            if time.time() - ACC_LOG_FILE.stat().st_mtime > 120:
+                return
             lines = ACC_LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             return

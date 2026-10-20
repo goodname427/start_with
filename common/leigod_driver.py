@@ -6,6 +6,7 @@ UIA 控件树，也无法向窗口发送输入，因此调用方必须先提权�
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import time
 import winreg
@@ -198,18 +199,43 @@ class LeiGodDriver:
             return child, text, rect
         return None
 
-    def _find_game_item(self, name: str):
+    @staticmethod
+    def _normalize_game_name(value: str) -> str:
+        return re.sub(r"[\s:：\-_·™®©]+", "", value).casefold()
+
+    def _find_game_item(self, names: list[str]):
         window = self._window
         if window is None:
             return None
         window_rect = window.rectangle()
         sidebar_edge = window_rect.left + SIDEBAR_WIDTH
-        target = name.strip().casefold()
+
+        candidates = [
+            self._normalize_game_name(str(name))
+            for name in names
+            if str(name).strip()
+        ]
+        items = []
         for child, control_type, text, rect in self._visible_controls({"Text", "Button"}):
             if rect.left >= sidebar_edge:
                 continue
-            if text.strip().casefold() == target:
-                return child, text, rect
+            normalized = self._normalize_game_name(text)
+            if normalized:
+                items.append((child, text.strip(), rect, normalized))
+
+        for candidate in candidates:
+            for item in items:
+                if item[3] == candidate:
+                    return item[0], item[1], item[2]
+
+        for candidate in candidates:
+            if len(candidate) < 4:
+                continue
+            for item in items:
+                if len(item[3]) < 4:
+                    continue
+                if candidate in item[3] or item[3] in candidate:
+                    return item[0], item[1], item[2]
         return None
 
     def _is_accelerating(self) -> bool:
@@ -228,27 +254,29 @@ class LeiGodDriver:
 
     # ------------------------------------------------------------------ 操作
 
-    def open_game(self, game_name: str) -> bool:
-        name = str(game_name).strip()
-        if not name:
+    def open_game(self, game_names: str | list[str]) -> str:
+        names = [game_names] if isinstance(game_names, str) else list(game_names)
+        names = [str(name).strip() for name in names if str(name).strip()]
+        if not names:
             raise AcceleratorError("未填写雷神加速游戏名称")
         self._focus()
 
-        found = self._find_game_item(name)
+        found = self._find_game_item(names)
         if found is None:
             raise AcceleratorError(
-                f"未在雷神「我的加速」中找到 [{name}]，请先在雷神客户端打开该游戏并加入「我的加速」"
+                f"未在雷神「我的加速」中找到 [{' / '.join(names)}]，"
+                "请先在雷神客户端打开该游戏并加入「我的加速」"
             )
 
         child, text, rect = found
-        self._log(f"打开雷神游戏：{text}")
+        self._log(f"打开雷神游戏：{text}（匹配：{' / '.join(names)}）")
         child.click_input()
         time.sleep(1.5)
         if self._find_text(START_TEXTS | LAUNCH_TEXTS, sidebar=False) is None:
             time.sleep(1.0)
             if self._find_text(START_TEXTS | LAUNCH_TEXTS, sidebar=False) is None:
-                raise AcceleratorError(f"打开游戏 [{name}] 失败，未进入游戏详情页")
-        return True
+                raise AcceleratorError(f"打开游戏 [{text}] 失败，未进入游戏详情页")
+        return text
 
     def start(self, timeout: float = 120.0) -> bool:
         self._focus()
@@ -272,10 +300,11 @@ class LeiGodDriver:
             f"等待雷神加速超时（{timeout:g} 秒）。当前界面：{self._status_texts()}"
         )
 
-    def accelerate_game(self, game_name: str, timeout: float = 120.0) -> bool:
+    def accelerate_game(self, game_names: str | list[str], timeout: float = 120.0) -> str:
         self.ensure_running()
-        self.open_game(game_name)
-        return self.start(timeout)
+        matched = self.open_game(game_names)
+        self.start(timeout)
+        return matched
 
     def launch_game(self) -> bool:
         self._focus()

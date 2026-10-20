@@ -1,31 +1,13 @@
-"""雷神加速操作：通过界面自动化让雷神加速指定游戏。"""
-from datetime import datetime
+"""雷神加速操作：通过界面自动化让雷神加速当前绑定/启动的应用。"""
 from typing import override
 
 from actions.action import StartWithAction
-from common.paths import ACC_LOG_FILE, ensure_dirs
+from common import accelerator_log
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
 MAX_TIMEOUT_SECONDS = 600.0
-
-
-def reset_log(name: str) -> None:
-    try:
-        ensure_dirs()
-        ACC_LOG_FILE.write_text(
-            f"[{datetime.now():%Y-%m-%d %H:%M:%S}] 雷神加速：{name}\n",
-            encoding="utf-8",
-        )
-    except OSError:
-        pass
-
-
-def append_log(message: str) -> None:
-    try:
-        with open(ACC_LOG_FILE, "a", encoding="utf-8") as file:
-            file.write(f"[{datetime.now():%H:%M:%S}] {message}\n")
-    except OSError:
-        pass
+AUTO_TOKENS = {"", "auto", "自动"}
+CONTEXT_KEYS = ("app_folder", "app_title", "app_product", "app_stem", "app_name")
 
 
 def parse_args(raw) -> tuple[str, float]:
@@ -43,28 +25,43 @@ def parse_args(raw) -> tuple[str, float]:
     return text, timeout
 
 
+def resolve_candidates(raw_name: str, variables: dict[str, str]) -> list[str]:
+    """auto / 空参数时，从当前应用自动推导可能的雷神游戏名。"""
+    if raw_name and raw_name.casefold() not in AUTO_TOKENS:
+        return [raw_name]
+
+    candidates: list[str] = []
+    for key in CONTEXT_KEYS:
+        value = str(variables.get(key) or "").strip()
+        if value and value not in candidates:
+            candidates.append(value)
+    return candidates
+
+
 class LeigodAccAction(StartWithAction):
     label = "雷神加速"
-    args_label = "游戏名称（可加 |超时秒数）"
+    args_label = "游戏名称 / auto（可加 |超时秒数）"
     args_kind = "text"
-    description = "打开雷神并加速指定游戏，等待出现「加速中」；游戏需在雷神「我的加速」列表中。"
+    description = "打开雷神并加速当前绑定的应用；auto 会根据启动的 exe 所在文件夹和文件描述自动匹配。"
     order = 25
 
     @override
     def run(self) -> bool:
-        name, timeout = parse_args(self.args)
-        if not name:
-            print("雷神加速游戏名称不能为空")
-            return False
+        raw_name, timeout = parse_args(self.args)
         if timeout < 0:
             print(f"雷神加速超时无效: {self.args}")
             return False
 
-        reset_log(name)
+        candidates = resolve_candidates(raw_name, getattr(self, "variables", {}) or {})
+        if not candidates:
+            print("雷神加速：无法从当前应用推断游戏名称，请填写名称或通过 --var 传入")
+            return False
+
+        accelerator_log.reset(f"雷神加速：{' / '.join(candidates)}")
 
         def log(message: str) -> None:
             print(message)
-            append_log(message)
+            accelerator_log.append(message)
 
         comtypes = None
         try:
@@ -80,11 +77,11 @@ class LeigodAccAction(StartWithAction):
 
             driver = LeiGodDriver(log)
             try:
-                driver.accelerate_game(name, timeout=timeout)
+                matched = driver.accelerate_game(candidates, timeout=timeout)
             except AcceleratorError as exc:
                 log(f"雷神加速失败: {exc}")
                 return False
-            log(f"雷神加速 [{name}] 成功")
+            log(f"雷神加速 [{matched}] 成功")
             return True
         except Exception as exc:
             log(f"雷神加速失败: {exc}")

@@ -127,42 +127,54 @@ python apply_config.py -c game
 
 绑定数据保存在 `data/bindings.json`，设置保存在 `data/settings.json`。
 
-### 先加速再启动（参数化配置）
+### 启动/退出时自动加速（雷神加速器）
 
-加速器只是一个普通操作（`leigod_acc`），放在配置的动作列表里；不同应用只需要在绑定里提供不同的参数，不用复制配置。
+加速器只是普通动作（`leigod_acc` / `leigod_stop`），由应用绑定在程序启动/退出时自动触发，不需要手动点「启动」。
 
-示例配置 `config/game_launch.json`：
+示例：
+
+`config/game_acc.json`（游戏启动时应用）：
 
 ```json
 {
     "actions": [
         { "action": "apply_config", "args": "game" },
-        { "action": "leigod_acc", "args": "{acc_game}" },
-        { "action": "run_app", "args": "{launch_path}" }
+        { "action": "leigod_acc", "args": "auto" }
     ]
 }
 ```
 
-在「应用绑定」页编辑绑定：
+`config/desktop_acc.json`（游戏退出后应用）：
 
-- **启动配置**：选择 `game_launch`
-- **启动参数**：每行一个 `key=value`
-  ```text
-  acc_game=Big Walk
-  launch_path=steam://rungameid/123456
-  ```
-- 点击「▶ 启动」或托盘菜单「启动绑定」，会按配置顺序执行：
-  1. 应用 `game` 配置（切换耳机等）
-  2. `leigod_acc` 启动雷神、打开「我的加速」中的 `Big Walk` 并等待出现「加速中」
-  3. `run_app` 启动 `launch_path`
+```json
+{
+    "actions": [
+        { "action": "leigod_stop", "args": "quit" },
+        { "action": "apply_config", "args": "desktop" }
+    ]
+}
+```
+
+绑定 THE FINALS：**启动时应用** `game_acc`，**退出后应用** `desktop_acc`。
+
+`leigod_acc auto` 会用触发绑定的 exe 信息自动匹配雷神游戏：
+
+1. `app_folder`：exe 所在文件夹（Steam 游戏通常就是游戏名，如 `The Finals`）
+2. `app_title` / `app_product`：exe 的版本信息
+3. `app_stem` / `app_name`：exe 文件名
+
+所以**文件夹批量绑定也不需要逐个填参数**：具体是哪个 exe 启动，就用哪个 exe 的信息去匹配。配置动作里也可以显式写 `{app_folder}`、`{app_name}` 等占位符。
+
+`leigod_acc` 写 `auto` 或 `自动` 时启用自动匹配；也可以直接写游戏名（支持 `名称|超时秒数`，默认 120 秒）。
 
 说明：
 
-- 配置里用 `{key}` 引用绑定参数；`apply_config` 嵌套调用会把参数继续传给子配置
-- `leigod_acc` 的参数就是游戏名称，可写成 `{acc_game}`，也支持 `名称|超时秒数`（默认 120 秒）
-- 游戏需要先加入雷神的「我的加速」列表（在雷神中打开一次即可）
-- `leigod_acc` 需要管理员权限，应用配置时会弹出 UAC 授权；以管理员身份运行 `gui.bat` 可避免重复提示
-- 雷神界面改版后自动化可能失效，届时只需调整 `common/leigod_driver.py` 中的控件名称
+- 游戏需要先在雷神「我的加速」中打开过一次
+- `leigod_acc` / `leigod_stop` 需要管理员权限，应用配置时会弹出 UAC；以管理员身份运行 `gui.bat` 可避免重复提示
+- `leigod_stop` 参数 `stop` 只停止加速，`quit` 停止并关闭雷神
+- `desktop_acc` 会先停止并关闭雷神，再应用 `desktop`（桌面音频）
+- 雷神界面改版后自动化可能失效，届时调整 `common/leigod_driver.py` 中的控件文字
+- 命令行仍可用 `python apply_config.py -c game_acc --var app_folder="The Finals"` 手动指定参数
 
 ## 配置版本管理（Git）
 
@@ -186,7 +198,7 @@ python apply_config.py -c game
 
 ## 关于管理员权限
 
-包含 `kill_task`、`run_app` 等操作的配置需要管理员权限。应用配置时会弹出 UAC 授权提示；
+包含 `kill_task`、`run_app`、`leigod_acc`、`leigod_stop` 等操作的配置需要管理员权限。应用配置时会弹出 UAC 授权提示；
 如果希望避免重复提示，可以右键 `gui.bat` 选择「以管理员身份运行」。
 
 应用配置时，命令行子进程（PowerShell、taskkill、cmd 等）都会在隐藏窗口中运行，

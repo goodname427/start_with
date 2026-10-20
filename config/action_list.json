@@ -68,11 +68,20 @@
         },
         {
             "action": "leigod_acc",
-            "args": "game_name|timeout_seconds",
+            "args": "auto / game_name|timeout_seconds",
             "note":
             {
-                "action": "启动雷神加速器并加速指定游戏，等待出现「加速中」",
-                "args": "传入雷神「我的加速」中的游戏名称，可选加 |超时秒数（默认 120 秒），例如 Big Walk|120"
+                "action": "启动雷神加速器并加速当前绑定的应用；auto 会根据启动的 exe 自动匹配游戏",
+                "args": "写 auto 自动匹配；也可填游戏名称，可选加 |超时秒数（默认 120 秒）"
+            }
+        },
+        {
+            "action": "leigod_stop",
+            "args": "stop / quit",
+            "note":
+            {
+                "action": "停止雷神加速；quit 会同时关闭雷神客户端",
+                "args": "stop 仅停止加速，quit 停止并关闭雷神"
             }
         }
     ]
