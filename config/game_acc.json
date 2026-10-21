@@ -1,13 +1,12 @@
 {
-    "actions":
-    [
+    "actions": [
         {
             "action": "apply_config",
             "args": "game"
         },
         {
-            "action": "leigod_acc",
-            "args": "auto"
+            "action": "run_app",
+            "args": "D:/Program Files (x86)/LeiGod_Acc/leigod_launcher.exe"
         }
     ]
 }
