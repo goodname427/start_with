@@ -46,12 +46,13 @@ class BindingEditorDialog(tk.Toplevel):
         )
         close_value = binding.close_config if binding and binding.close_config else CLOSE_NONE_LABEL
         self.close_config_var = tk.StringVar(master=self, value=close_value)
+        self.ignore_content = "\n".join(binding.ignore if binding else [])
         self.recursive_var = tk.BooleanVar(master=self, value=binding.recursive if binding else True)
         self.info_var = tk.StringVar(master=self, value="")
 
         self._build()
         self._on_type_changed()
-        theme.center_window(self, master, 660, 500)
+        theme.center_window(self, master, 660, 620)
         self.grab_set()
         self._schedule_scan()
 
@@ -127,6 +128,33 @@ class BindingEditorDialog(tk.Toplevel):
             font=theme.FONT_SMALL,
         ).grid(row=4, column=1, columnspan=2, sticky="w", pady=(0, sp(2)))
 
+        self.ignore_label = tk.Label(
+            body, text="忽略程序", bg=theme.CARD, fg=theme.TEXT, font=theme.FONT_UI
+        )
+        self.ignore_label.grid(row=5, column=0, sticky="nw", padx=sp((16, 10)), pady=sp(8))
+        self.ignore_text = tk.Text(
+            body,
+            height=3,
+            bg=theme.BG,
+            fg=theme.TEXT,
+            font=theme.FONT_MONO,
+            relief="solid",
+            bd=1,
+            padx=sp(6),
+            pady=sp(4),
+        )
+        self.ignore_text.grid(row=5, column=1, columnspan=2, sticky="ew", padx=sp((0, 16)), pady=sp(8))
+        self.ignore_text.insert("1.0", self.ignore_content)
+        self.ignore_hint = tk.Label(
+            body,
+            text="仅文件夹绑定使用。每行一个通配符，例如 UnityCrashHandler*.exe、*AntiCheat*.exe、vcredist*.exe。",
+            bg=theme.CARD,
+            fg=theme.MUTED,
+            font=theme.FONT_SMALL,
+            justify="left",
+        )
+        self.ignore_hint.grid(row=6, column=1, columnspan=2, sticky="w", pady=(0, sp(2)))
+
         self.chk_recursive = ttk.Checkbutton(
             body,
             text="包含子文件夹",
@@ -134,7 +162,7 @@ class BindingEditorDialog(tk.Toplevel):
             style="Card.TCheckbutton",
             command=self._schedule_scan,
         )
-        self.chk_recursive.grid(row=5, column=1, sticky="w", pady=sp((2, 6)))
+        self.chk_recursive.grid(row=7, column=1, sticky="w", pady=sp((2, 6)))
 
         self.info_label = tk.Label(
             body,
@@ -146,7 +174,7 @@ class BindingEditorDialog(tk.Toplevel):
             justify="left",
             wraplength=sp(540),
         )
-        self.info_label.grid(row=6, column=0, columnspan=3, sticky="ew", padx=sp(16), pady=sp((6, 14)))
+        self.info_label.grid(row=8, column=0, columnspan=3, sticky="ew", padx=sp(16), pady=sp((6, 14)))
 
         footer = tk.Frame(self, bg=theme.BG)
         footer.pack(fill="x", padx=sp(16), pady=sp((0, 14)))
@@ -161,8 +189,14 @@ class BindingEditorDialog(tk.Toplevel):
         self.btn_browse.configure(text="选择文件夹…" if is_folder else "选择程序…")
         if is_folder:
             self.chk_recursive.grid()
+            self.ignore_label.grid()
+            self.ignore_text.grid()
+            self.ignore_hint.grid()
         else:
             self.chk_recursive.grid_remove()
+            self.ignore_label.grid_remove()
+            self.ignore_text.grid_remove()
+            self.ignore_hint.grid_remove()
         self._schedule_scan()
 
     def _browse(self) -> None:
@@ -247,6 +281,12 @@ class BindingEditorDialog(tk.Toplevel):
         close_config = self.close_config_var.get().strip()
         if close_config == CLOSE_NONE_LABEL:
             close_config = ""
+        ignore: list[str] = []
+        if btype == BINDING_TYPE_FOLDER:
+            for line in self.ignore_text.get("1.0", "end").replace(",", "\n").splitlines():
+                pattern = line.strip()
+                if pattern and pattern not in ignore:
+                    ignore.append(pattern)
 
         if not target:
             messagebox.showwarning("缺少路径", "请填写或选择要绑定的程序/文件夹。", parent=self)
@@ -279,6 +319,7 @@ class BindingEditorDialog(tk.Toplevel):
             close_config=close_config,
             enabled=self.binding.enabled if self.binding else True,
             recursive=bool(self.recursive_var.get()),
+            ignore=ignore,
         )
 
         callback = self.on_saved

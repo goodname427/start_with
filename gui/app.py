@@ -10,15 +10,19 @@ import tkinter as tk
 from datetime import datetime
 from tkinter import messagebox, ttk
 
-from common import autostart, binding_store, config_store, settings_store
+from common import autostart, binding_store, config_store, launch_store, settings_store
 from common.action_meta import get_definition_map
 from common.binding_store import AppBinding
 from common.binding_watcher import BindingWatcher
+from common.command_utils import CommandUtils
+from common.launch_store import LaunchItem
 from common.paths import ACC_LOG_FILE, APP_ROOT, APPLY_SCRIPT, CONFIG_DIR
 from common.process_meta import build_context
+from common.process_monitor import ProcessInfo, list_processes
 from gui import theme
 from gui.binding_editor import BindingEditorDialog
 from gui.config_editor import ConfigEditorDialog
+from gui.launch_editor import LaunchEditorDialog
 from gui.version_panel import VersionPanel
 
 sp = theme.sp
@@ -33,6 +37,7 @@ class StartWithApp:
         self.settings = settings_store.load_settings()
         self.configs: list[config_store.ConfigInfo] = []
         self.bindings: list[AppBinding] = []
+        self.launches: list[LaunchItem] = []
         self.definition_map = get_definition_map()
 
         self._queue: queue.Queue = queue.Queue()
@@ -41,6 +46,8 @@ class StartWithApp:
         self._hidden = False
         self._closing = False
         self._tray_tip_shown = False
+        self._active_launch_ids: set[str] = set()
+        self._launch_pids: set[int] = set()
 
         theme.setup_theme(root)
         self._configure_window()
@@ -50,6 +57,7 @@ class StartWithApp:
 
         self._refresh_configs()
         self._refresh_bindings()
+        self._refresh_launches()
         self._setup_tray()
         self._update_monitor_ui()
         self._poll_queue()
@@ -132,11 +140,14 @@ class StartWithApp:
 
         self.configs_page = tk.Frame(self.notebook, bg=theme.BG)
         self.bindings_page = tk.Frame(self.notebook, bg=theme.BG)
+        self.launches_page = tk.Frame(self.notebook, bg=theme.BG)
         self.notebook.add(self.configs_page, text="  配置文件  ")
         self.notebook.add(self.bindings_page, text="  应用绑定  ")
+        self.notebook.add(self.launches_page, text="  游戏启动  ")
 
         self._build_configs_page()
         self._build_bindings_page()
+        self._build_launches_page()
 
         self.version_panel = VersionPanel(
             self.notebook,
@@ -212,12 +223,15 @@ class StartWithApp:
             self._refresh_configs()
         elif current == str(self.bindings_page):
             self._refresh_bindings()
+        elif current == str(self.launches_page):
+            self._refresh_launches()
         elif current == str(self.version_panel):
             self.version_panel.refresh()
 
     def _on_git_configs_changed(self) -> None:
         self._refresh_configs()
         self._refresh_bindings()
+        self._refresh_launches()
 
     # ------------------------------------------------------------------ 配置文件页
 
@@ -695,6 +709,391 @@ class StartWithApp:
         self._refresh_bindings(select=select)
         self._set_status(f"应用绑定已更新（{len(self.bindings)} 条）")
 
+    # ------------------------------------------------------------------ 游戏启动页
+
+    def _build_launches_page(self) -> None:
+        page = self.launches_page
+        page.rowconfigure(1, weight=1)
+        page.columnconfigure(0, weight=1)
+
+        toolbar = tk.Frame(page, bg=theme.BG)
+        toolbar.grid(row=0, column=0, sticky="ew", padx=sp(12), pady=sp((12, 8)))
+
+        theme.accent_button(toolbar, "＋ 新增启动", self._new_launch).pack(side="left")
+        self.btn_edit_launch = theme.ghost_button(toolbar, "编辑", self._edit_launch)
+        self.btn_edit_launch.pack(side="left", padx=sp((8, 0)))
+        self.btn_delete_launch = theme.ghost_button(toolbar, "删除", self._delete_launch)
+        self.btn_delete_launch.pack(side="left", padx=sp((8, 0)))
+        self.btn_toggle_launch = theme.ghost_button(toolbar, "启用 / 停用", self._toggle_launch)
+        self.btn_toggle_launch.pack(side="left", padx=sp((8, 0)))
+        self.btn_start_launch = theme.ghost_button(toolbar, "▶ 启动", self._start_selected_launch)
+        self.btn_start_launch.pack(side="left", padx=sp((16, 0)))
+
+        tree_card = theme.make_card(page)
+        tree_card.grid(row=1, column=0, sticky="nsew", padx=sp(12), pady=sp((0, 12)))
+        tree_card.rowconfigure(1, weight=1)
+        tree_card.columnconfigure(0, weight=1)
+
+        head = tk.Frame(tree_card, bg=theme.CARD)
+        head.grid(row=0, column=0, sticky="ew", padx=sp(14), pady=sp((11, 6)))
+        self.launch_count_label = tk.Label(
+            head, text="游戏启动", bg=theme.CARD, fg=theme.TEXT, font=theme.FONT_SECTION
+        )
+        self.launch_count_label.pack(side="left")
+        tk.Label(
+            head,
+            text="先应用启动前配置，再启动程序；退出后应用退出配置",
+            bg=theme.CARD,
+            fg=theme.MUTED,
+            font=theme.FONT_SMALL,
+        ).pack(side="left", padx=sp((10, 0)))
+
+        wrap = tk.Frame(tree_card, bg=theme.CARD)
+        wrap.grid(row=1, column=0, sticky="nsew", padx=sp(14), pady=sp((0, 12)))
+        wrap.rowconfigure(0, weight=1)
+        wrap.columnconfigure(0, weight=1)
+
+        self.launch_tree = ttk.Treeview(
+            wrap,
+            columns=("state", "name", "target", "config", "close"),
+            show="headings",
+            selectmode="browse",
+        )
+        launch_columns = (
+            ("state", "状态", sp(66), "center", False, sp(56)),
+            ("name", "名称", sp(150), "w", False, sp(100)),
+            ("target", "程序", sp(330), "w", True, sp(160)),
+            ("config", "启动前", sp(128), "w", False, sp(96)),
+            ("close", "退出后", sp(128), "w", False, sp(96)),
+        )
+        for key, title, width, anchor, stretch, minwidth in launch_columns:
+            self.launch_tree.heading(key, text=title)
+            self.launch_tree.column(key, width=width, minwidth=minwidth, anchor=anchor, stretch=stretch)
+        self.launch_tree.grid(row=0, column=0, sticky="nsew")
+        scroll = ttk.Scrollbar(wrap, orient="vertical", command=self.launch_tree.yview)
+        scroll.grid(row=0, column=1, sticky="ns")
+        self.launch_tree.configure(yscrollcommand=scroll.set)
+        self.launch_tree.tag_configure("disabled", foreground=theme.MUTED)
+        self.launch_tree.tag_configure("missing", foreground=theme.DANGER)
+        self.launch_tree.bind("<<TreeviewSelect>>", self._on_launch_selected)
+        self.launch_tree.bind("<Double-1>", lambda _event: self._edit_launch())
+        self.launch_tree.bind("<Delete>", lambda _event: self._delete_launch())
+
+    def _refresh_launches(self, select: str | None = None) -> None:
+        current = select
+        if current is None:
+            selected = self._selected_launch()
+            current = selected.id if selected else None
+
+        self.launches = launch_store.load_launches()
+        self.launch_tree.delete(*self.launch_tree.get_children())
+        for item in self.launches:
+            missing = not config_store.config_path(item.config).exists()
+            missing_close = bool(item.close_config) and not config_store.config_path(item.close_config).exists()
+            state = "启用" if item.enabled else "已停用"
+            config_text = item.config + ("  ⚠" if missing else "")
+            close_text = (item.close_config + ("  ⚠" if missing_close else "")) if item.close_config else "—"
+            tags = []
+            if not item.enabled:
+                tags.append("disabled")
+            if missing or missing_close:
+                tags.append("missing")
+            self.launch_tree.insert(
+                "",
+                "end",
+                iid=item.id,
+                values=(state, item.display_name(), item.display_target(), config_text, close_text),
+                tags=tuple(tags),
+            )
+
+        self.launch_count_label.configure(text=f"游戏启动 · {len(self.launches)}")
+        ids = [item.id for item in self.launches]
+        if current in ids:
+            self.launch_tree.selection_set(current)
+            self.launch_tree.see(current)
+        elif ids:
+            self.launch_tree.selection_set(ids[0])
+            self.launch_tree.see(ids[0])
+
+        self._on_launch_selected()
+
+    def _selected_launch(self) -> LaunchItem | None:
+        selection = self.launch_tree.selection()
+        if not selection:
+            return None
+        return next((item for item in self.launches if item.id == selection[0]), None)
+
+    def _on_launch_selected(self, _event=None) -> None:
+        item = self._selected_launch()
+        state = "normal" if item is not None else "disabled"
+        for button in (self.btn_edit_launch, self.btn_delete_launch, self.btn_toggle_launch):
+            button.configure(state=state)
+        self.btn_start_launch.configure(
+            state="normal" if item is not None and item.enabled else "disabled"
+        )
+
+    def _new_launch(self) -> None:
+        config_names = self._available_config_names()
+        if not config_names:
+            messagebox.showinfo(
+                "暂无配置",
+                "请先在「配置文件」页创建至少一个配置（例如 game_acc）。",
+                parent=self.root,
+            )
+            return
+
+        holder: dict[str, LaunchItem] = {}
+        dialog = LaunchEditorDialog(
+            self.root,
+            None,
+            config_names,
+            lambda item: holder.setdefault("launch", item),
+        )
+        self.root.wait_window(dialog)
+        item = holder.get("launch")
+        if item is None:
+            return
+        self.launches.append(item)
+        self._persist_launches(select=item.id)
+        self._log(f"已新增启动项：{item.display_name()} → {item.display_configs()}", "success")
+
+    def _edit_launch(self) -> None:
+        item = self._selected_launch()
+        if item is None:
+            return
+        config_names = self._available_config_names()
+        for name in (item.config, item.close_config):
+            if name and name not in config_names:
+                config_names.append(name)
+
+        holder: dict[str, LaunchItem] = {}
+        dialog = LaunchEditorDialog(
+            self.root,
+            item,
+            config_names,
+            lambda result: holder.setdefault("launch", result),
+        )
+        self.root.wait_window(dialog)
+        result = holder.get("launch")
+        if result is None:
+            return
+        for index, existing in enumerate(self.launches):
+            if existing.id == result.id:
+                self.launches[index] = result
+                break
+        self._persist_launches(select=result.id)
+        self._log(f"已更新启动项：{result.display_name()}", "info")
+
+    def _delete_launch(self) -> None:
+        item = self._selected_launch()
+        if item is None:
+            return
+        if not messagebox.askyesno(
+            "删除启动项",
+            f"确定要删除这个启动项吗？\n{item.display_name()} → {item.display_configs()}",
+            parent=self.root,
+        ):
+            return
+        self.launches = [existing for existing in self.launches if existing.id != item.id]
+        self._persist_launches()
+        self._log(f"已删除启动项：{item.display_name()}", "info")
+
+    def _toggle_launch(self) -> None:
+        item = self._selected_launch()
+        if item is None:
+            return
+        item.enabled = not item.enabled
+        self._persist_launches(select=item.id)
+        self._log(f"启动项已{'启用' if item.enabled else '停用'}：{item.display_name()}", "info")
+
+    def _persist_launches(self, select: str | None = None) -> None:
+        try:
+            launch_store.save_launches(self.launches)
+        except Exception as exc:
+            messagebox.showerror("保存失败", f"无法保存启动项：{exc}", parent=self.root)
+            return
+        self._refresh_launches(select=select)
+        self._set_status(f"游戏启动已更新（{len(self.launches)} 条）")
+
+    def _start_selected_launch(self) -> None:
+        item = self._selected_launch()
+        if item is None:
+            return
+        self._start_launch_item(item)
+
+    def _start_launch_by_id(self, item_id: str) -> None:
+        item = next((entry for entry in launch_store.load_launches() if entry.id == item_id), None)
+        if item is None:
+            self._log("启动项不存在，可能已被删除。", "error")
+            return
+        self._start_launch_item(item)
+
+    def _start_launch_item(self, item: LaunchItem) -> None:
+        current = next((entry for entry in self.launches if entry.id == item.id), item)
+        if not current.enabled:
+            self._log(f"启动项 [{current.display_name()}] 已停用。", "info")
+            return
+        if current.id in self._active_launch_ids:
+            self._log(f"启动项 [{current.display_name()}] 正在启动中。", "info")
+            return
+        if not config_store.config_path(current.config).exists():
+            self._log(f"启动配置 [{current.config}] 不存在。", "error")
+            return
+        if not os.path.exists(current.target):
+            self._log(f"启动程序不存在：{current.target}", "error")
+            return
+        if self._matching_pids(current.target):
+            messagebox.showinfo(
+                "程序已在运行",
+                f"{os.path.basename(current.target)} 已经在运行，无需重复启动。",
+                parent=self.root,
+            )
+            return
+
+        process = ProcessInfo(
+            pid=0,
+            name=os.path.basename(current.target),
+            path=current.target,
+        )
+        variables = build_context(current, process)
+        self._active_launch_ids.add(current.id)
+        self._log(
+            f"启动项 [{current.display_name()}]：先应用 [{current.config}]，再启动程序",
+            "info",
+        )
+        self._set_status(f"正在启动 {current.display_name()}…")
+        threading.Thread(
+            target=self._run_launch_item,
+            args=(current, variables),
+            daemon=True,
+        ).start()
+
+    @staticmethod
+    def _matching_pids(target: str) -> list[int]:
+        name = os.path.basename(target).strip().lower()
+        target_path = ""
+        if os.path.exists(target):
+            target_path = os.path.normcase(os.path.normpath(target))
+        name_matches: list[int] = []
+        exact_matches: list[int] = []
+        for process in list_processes():
+            if process.name.lower() != name:
+                continue
+            name_matches.append(process.pid)
+            if target_path and process.path:
+                if os.path.normcase(os.path.normpath(process.path)) == target_path:
+                    exact_matches.append(process.pid)
+        # 优先精确路径；Store 版应用可能路径不同，退回按进程名匹配
+        return exact_matches or name_matches
+
+    def _wait_for_new_pid(self, target: str, baseline: set[int], timeout: float = 30.0) -> int | None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            for pid in self._matching_pids(target):
+                if pid not in baseline:
+                    return pid
+            time.sleep(0.5)
+        return None
+
+    @staticmethod
+    def _pid_exists(pid: int) -> bool:
+        return any(process.pid == pid for process in list_processes())
+
+    def _run_launch_item(self, item: LaunchItem, variables: dict[str, str]) -> None:
+        def emit(text: str, level: str = "info") -> None:
+            self._queue.put(("launch_log", {"text": text, "level": level}))
+
+        pid: int | None = None
+        error = ""
+        try:
+            emit(f"应用启动前配置 [{item.config}]…")
+            ok, output = self._apply_config_sync(item.config, variables)
+            for line in [part.strip() for part in output.splitlines() if part.strip()][-8:]:
+                emit(f"  {line}")
+            if not ok:
+                error = f"启动前配置 [{item.config}] 应用失败"
+                emit(error, "error")
+                return
+            emit(f"启动前配置 [{item.config}] 已应用", "success")
+            self._emit_accelerator_log(emit)
+
+            baseline = set(self._matching_pids(item.target))
+            emit(f"启动程序：{item.target}")
+            try:
+                if CommandUtils.is_run_as_admin():
+                    # 控制面板提权时，通过 explorer 以普通用户权限启动游戏
+                    command = ["explorer.exe", item.target]
+                else:
+                    command = [item.target]
+                subprocess.Popen(
+                    command,
+                    cwd=os.path.dirname(item.target) or None,
+                    creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                )
+            except Exception as exc:
+                error = f"启动程序失败：{exc}"
+                emit(error, "error")
+                return
+
+            pid = self._wait_for_new_pid(item.target, baseline, timeout=30.0)
+            if pid is None:
+                error = "未检测到启动的游戏进程，请确认程序路径或改为绑定主程序 exe"
+                emit(error, "error")
+                return
+            self._launch_pids.add(pid)
+            self._queue.put(
+                (
+                    "launch_started",
+                    {"id": item.id, "name": item.display_name(), "pid": pid},
+                )
+            )
+
+            while self._pid_exists(pid):
+                time.sleep(1.0)
+
+            if item.close_config:
+                if not config_store.config_path(item.close_config).exists():
+                    emit(f"退出配置 [{item.close_config}] 不存在，跳过", "error")
+                else:
+                    emit(f"程序已退出，应用退出配置 [{item.close_config}]…")
+                    close_ok, close_output = self._apply_config_sync(item.close_config, variables)
+                    for line in [part.strip() for part in close_output.splitlines() if part.strip()][-8:]:
+                        emit(f"  {line}")
+                    if close_ok:
+                        emit(f"退出配置 [{item.close_config}] 已应用", "success")
+                        self._emit_accelerator_log(emit)
+                    else:
+                        emit(f"退出配置 [{item.close_config}] 应用失败", "error")
+        except Exception as exc:
+            logger.exception("游戏启动流程失败")
+            error = str(exc)
+            emit(f"启动流程失败：{exc}", "error")
+        finally:
+            if pid is not None:
+                self._launch_pids.discard(pid)
+            self._queue.put(
+                (
+                    "launch_done",
+                    {
+                        "id": item.id,
+                        "name": item.display_name(),
+                        "ok": not error,
+                        "error": error,
+                    },
+                )
+            )
+
+    def _emit_accelerator_log(self, emit) -> None:
+        try:
+            if time.time() - ACC_LOG_FILE.stat().st_mtime > 120:
+                return
+            lines = ACC_LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return
+        for line in lines[-15:]:
+            level = "error" if ("失败" in line or "ERROR" in line) else "info"
+            emit(f"  {line}", level)
+
     # ------------------------------------------------------------------ 监听
 
     def _sync_watcher(self) -> None:
@@ -742,6 +1141,8 @@ class StartWithApp:
 
         binding: AppBinding = payload["binding"]
         process = payload["process"]
+        if process.pid in self._launch_pids:
+            return
         current = next((b for b in self.bindings if b.id == binding.id), None)
         if current is None or not current.enabled or not current.config:
             return
@@ -763,6 +1164,8 @@ class StartWithApp:
 
         binding: AppBinding = payload["binding"]
         process = payload["process"]
+        if process.pid in self._launch_pids:
+            return
         current = next((b for b in self.bindings if b.id == binding.id), None)
         if current is None or not current.enabled or not current.close_config:
             return
@@ -890,6 +1293,31 @@ class StartWithApp:
                 parent=self.root,
             )
 
+    def _handle_launch_done(self, payload: dict) -> None:
+        item_id = str(payload.get("id") or "")
+        name = str(payload.get("name") or "")
+        ok = bool(payload.get("ok"))
+        error = str(payload.get("error") or "")
+        self._active_launch_ids.discard(item_id)
+
+        if ok:
+            self._log(f"启动项 [{name}] 已结束。", "success")
+            self._set_status(f"启动项 [{name}] 已结束")
+            if self._hidden and self._tray and self.settings.get("notify_on_trigger", True):
+                self._tray.notify("游戏已退出", name)
+            return
+
+        self._log(f"启动项 [{name}] 失败：{error or '未知错误'}", "error")
+        self._set_status(f"启动项 [{name}] 失败")
+        if self._hidden and self._tray:
+            self._tray.notify("游戏启动失败", f"{name}：{error or '未知错误'}")
+        else:
+            messagebox.showerror(
+                "游戏启动失败",
+                f"{name}\n\n{error or '未知错误'}",
+                parent=self.root,
+            )
+
     # ------------------------------------------------------------------ 监听开关 / 自启
 
     def _on_monitor_checkbox(self) -> None:
@@ -975,24 +1403,30 @@ class StartWithApp:
         config_items = [{"label": c.name, "key": f"apply:{c.name}"} for c in configs]
         if not config_items:
             config_items = [{"label": "（暂无配置）", "enabled": False}]
-        edit_items = [{"label": c.name, "key": f"edit:{c.name}"} for c in configs]
-        if not edit_items:
-            edit_items = [{"label": "（暂无配置）", "enabled": False}]
+
+        try:
+            launches = launch_store.load_launches()
+        except Exception:
+            launches = []
+        launch_items = [
+            {"label": item.display_name(), "key": f"launch:{item.id}"}
+            for item in launches
+            if item.enabled
+        ]
+        if not launch_items:
+            launch_items = [{"label": "（暂无启动项）", "enabled": False}]
 
         return [
             {"label": "打开控制面板", "key": "open"},
-            {"label": "新建配置…", "key": "new_config"},
             {"separator": True},
+            {"label": "启动", "children": launch_items},
             {"label": "应用配置", "children": config_items},
-            {"label": "编辑配置", "children": edit_items},
             {"separator": True},
             {
                 "label": "后台监听",
                 "key": "toggle_monitor",
                 "checked": bool(settings.get("monitor_enabled", True)),
             },
-            {"label": "绑定设置…", "key": "open_bindings"},
-            {"label": "版本管理…", "key": "open_versions"},
             {"separator": True},
             {"label": "退出", "key": "quit"},
         ]
@@ -1000,23 +1434,12 @@ class StartWithApp:
     def _handle_tray_key(self, key: str) -> None:
         if key == "open":
             self.show_window()
-        elif key == "new_config":
-            self.show_window()
-            self.notebook.select(self.configs_page)
-            self._new_config()
         elif key.startswith("apply:"):
             self.apply_config(key.split(":", 1)[1], source="tray")
-        elif key.startswith("edit:"):
-            self.show_window()
-            self._open_config_editor_by_name(key.split(":", 1)[1])
+        elif key.startswith("launch:"):
+            self._start_launch_by_id(key.split(":", 1)[1])
         elif key == "toggle_monitor":
             self._toggle_monitor()
-        elif key == "open_bindings":
-            self.show_window()
-            self.notebook.select(self.bindings_page)
-        elif key == "open_versions":
-            self.show_window()
-            self.notebook.select(self.version_panel)
         elif key == "quit":
             self.quit_app()
 
@@ -1120,6 +1543,17 @@ class StartWithApp:
                         self._handle_close_trigger(payload)
                     elif kind == "apply_done":
                         self._handle_apply_done(payload)
+                    elif kind == "launch_log":
+                        text = str(payload.get("text", ""))
+                        self._log(text, str(payload.get("level", "info")))
+                        self._set_status(text)
+                    elif kind == "launch_started":
+                        name = str(payload.get("name", ""))
+                        pid = payload.get("pid")
+                        self._log(f"已启动 {name}（PID {pid}），等待程序退出…", "success")
+                        self._set_status(f"已启动 {name}")
+                    elif kind == "launch_done":
+                        self._handle_launch_done(payload)
                     elif kind == "tray":
                         self._handle_tray_key(str(payload))
                 except Exception:

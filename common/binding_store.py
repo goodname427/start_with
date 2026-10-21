@@ -1,9 +1,10 @@
 """应用绑定数据模型与匹配规则（data/bindings.json）。"""
+import fnmatch
 import json
 import os
 import threading
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from common.paths import BINDINGS_FILE, ensure_dirs
@@ -25,6 +26,8 @@ class AppBinding:
     close_config: str = ""
     enabled: bool = True
     recursive: bool = True
+    # 仅文件夹绑定使用：忽略的 exe 通配符，例如 UnityCrashHandler*.exe
+    ignore: list[str] = field(default_factory=list)
 
     def display_type(self) -> str:
         return TYPE_LABELS.get(self.type, self.type)
@@ -39,6 +42,8 @@ class AppBinding:
             name = os.path.basename(self.target.rstrip("\\/")) or self.target
             return f"{name}   ·   {self.target}"
         suffix = "   （含子文件夹）" if self.recursive else ""
+        if self.ignore:
+            suffix += f"   （忽略 {len(self.ignore)} 项）"
         return f"{self.target}{suffix}"
 
 
@@ -48,6 +53,7 @@ def new_binding(
     config: str,
     recursive: bool = True,
     close_config: str = "",
+    ignore: list[str] | None = None,
 ) -> AppBinding:
     return AppBinding(
         id=uuid.uuid4().hex,
@@ -56,6 +62,7 @@ def new_binding(
         config=config.strip(),
         close_config=close_config.strip(),
         recursive=recursive,
+        ignore=list(ignore or []),
     )
 
 
@@ -77,6 +84,12 @@ def load_bindings() -> list[AppBinding]:
         target = str(item.get("target", "")).strip()
         config = str(item.get("config", "")).strip()
         close_config = str(item.get("close_config", "")).strip()
+        raw_ignore = item.get("ignore")
+        ignore: list[str] = []
+        if isinstance(raw_ignore, list):
+            ignore = [str(pattern).strip() for pattern in raw_ignore if str(pattern).strip()]
+        elif isinstance(raw_ignore, str):
+            ignore = [part.strip() for part in raw_ignore.replace(",", "\n").splitlines() if part.strip()]
         if btype not in TYPE_LABELS or not target or not config:
             continue
         bindings.append(
@@ -88,6 +101,7 @@ def load_bindings() -> list[AppBinding]:
                 close_config=close_config,
                 enabled=bool(item.get("enabled", True)),
                 recursive=bool(item.get("recursive", True)),
+                ignore=ignore if btype == BINDING_TYPE_FOLDER else [],
             )
         )
     return bindings
@@ -105,6 +119,7 @@ def save_bindings(bindings: list[AppBinding]) -> None:
                 "close_config": b.close_config,
                 "enabled": b.enabled,
                 "recursive": b.recursive,
+                "ignore": b.ignore if b.type == BINDING_TYPE_FOLDER else [],
             }
             for b in bindings
         ],
@@ -118,6 +133,34 @@ def save_bindings(bindings: list[AppBinding]) -> None:
 
 def _norm(path: str) -> str:
     return os.path.normcase(os.path.normpath(os.path.abspath(path)))
+
+
+def _is_ignored(binding: AppBinding, process: ProcessInfo) -> bool:
+    """文件夹绑定的忽略规则：支持 exe 名、相对路径和完整路径通配符。"""
+    if not binding.ignore:
+        return False
+
+    name = (process.name or "").casefold()
+    full_path = (process.path or "").replace("/", "\\").casefold()
+    relative = ""
+    if process.path:
+        try:
+            relative = os.path.relpath(process.path, binding.target).replace("/", "\\").casefold()
+        except (OSError, ValueError):
+            relative = ""
+
+    for raw_pattern in binding.ignore:
+        pattern = str(raw_pattern).strip().replace("/", "\\").casefold()
+        if not pattern:
+            continue
+        if "\\" in pattern:
+            if full_path and fnmatch.fnmatch(full_path, pattern):
+                return True
+            if relative and fnmatch.fnmatch(relative, pattern):
+                return True
+        elif name and fnmatch.fnmatch(name, pattern):
+            return True
+    return False
 
 
 def binding_matches(binding: AppBinding, process: ProcessInfo) -> bool:
@@ -136,10 +179,14 @@ def binding_matches(binding: AppBinding, process: ProcessInfo) -> bool:
             exe_path = _norm(process.path)
         except (OSError, ValueError):
             return False
-        if binding.recursive:
-            prefix = folder if folder.endswith(os.sep) else folder + os.sep
-            return exe_path.startswith(prefix)
-        return os.path.dirname(exe_path) == folder
+        matched = (
+            exe_path.startswith(folder if folder.endswith(os.sep) else folder + os.sep)
+            if binding.recursive
+            else os.path.dirname(exe_path) == folder
+        )
+        if not matched:
+            return False
+        return not _is_ignored(binding, process)
 
     return False
 
