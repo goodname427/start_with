@@ -17,6 +17,14 @@ from gui import theme
 sp = theme.sp
 CLOSE_NONE_LABEL = "（不应用）"
 
+IGNORE_TEMPLATES: list[tuple[str, list[str]]] = [
+    ("崩溃处理器", ["*CrashHandler*.exe", "*crashreport*.exe", "*CrashReport*.exe"]),
+    ("反作弊组件", ["*EasyAntiCheat*.exe", "*BattlEye*.exe", "*AntiCheat*.exe"]),
+    ("安装 / 运行库", ["vcredist*.exe", "*DXSETUP*.exe", "*dotnet*.exe", "*redist*.exe", "*unins*.exe"]),
+    ("更新 / 安装器", ["*setup*.exe", "*installer*.exe", "*update*.exe"]),
+    ("Steam 辅助", ["steamerrorreporter*.exe", "steamservice.exe", "steamwebhelper.exe"]),
+]
+
 
 class BindingEditorDialog(tk.Toplevel):
     def __init__(self, master, binding: AppBinding | None, config_names: list[str], on_saved):
@@ -52,7 +60,7 @@ class BindingEditorDialog(tk.Toplevel):
 
         self._build()
         self._on_type_changed()
-        theme.center_window(self, master, 660, 620)
+        theme.center_window(self, master, 660, 660)
         self.grab_set()
         self._schedule_scan()
 
@@ -145,15 +153,64 @@ class BindingEditorDialog(tk.Toplevel):
         )
         self.ignore_text.grid(row=5, column=1, columnspan=2, sticky="ew", padx=sp((0, 16)), pady=sp(8))
         self.ignore_text.insert("1.0", self.ignore_content)
+
+        self.ignore_actions = tk.Frame(body, bg=theme.CARD)
+        self.ignore_actions.grid(row=6, column=1, columnspan=2, sticky="w", pady=(0, sp(2)))
+
+        self.btn_ignore_template = tk.Menubutton(
+            self.ignore_actions,
+            text="常用模板 ▾",
+            bg=theme.CARD,
+            fg=theme.ACCENT,
+            activebackground=theme.CARD,
+            activeforeground=theme.ACCENT,
+            relief="flat",
+            bd=0,
+            font=theme.FONT_SMALL,
+            cursor="hand2",
+        )
+        template_menu = tk.Menu(self.btn_ignore_template, tearoff=False)
+        for label, patterns in IGNORE_TEMPLATES:
+            template_menu.add_command(
+                label=label,
+                command=lambda items=patterns: self._append_ignore_patterns(items),
+            )
+        template_menu.add_separator()
+        template_menu.add_command(
+            label="全部常用",
+            command=lambda: self._append_ignore_patterns(
+                [pattern for _, items in IGNORE_TEMPLATES for pattern in items]
+            ),
+        )
+        self.btn_ignore_template.configure(menu=template_menu)
+        self._ignore_template_menu = template_menu
+        self.btn_ignore_template.pack(side="left")
+
+        self.btn_ignore_files = ttk.Button(
+            self.ignore_actions,
+            text="选择文件…",
+            style="Ghost.TButton",
+            command=self._add_ignore_files,
+        )
+        self.btn_ignore_files.pack(side="left", padx=sp((8, 0)))
+
+        self.btn_ignore_clear = ttk.Button(
+            self.ignore_actions,
+            text="清空",
+            style="Ghost.TButton",
+            command=lambda: self._set_ignore_patterns([]),
+        )
+        self.btn_ignore_clear.pack(side="left", padx=sp((8, 0)))
+
         self.ignore_hint = tk.Label(
             body,
-            text="仅文件夹绑定使用。每行一个通配符，例如 UnityCrashHandler*.exe、*AntiCheat*.exe、vcredist*.exe。",
+            text="每行一个通配符，也可用上方模板或直接选择文件；例如 UnityCrashHandler*.exe、*AntiCheat*.exe。",
             bg=theme.CARD,
             fg=theme.MUTED,
             font=theme.FONT_SMALL,
             justify="left",
         )
-        self.ignore_hint.grid(row=6, column=1, columnspan=2, sticky="w", pady=(0, sp(2)))
+        self.ignore_hint.grid(row=7, column=1, columnspan=2, sticky="w", pady=(0, sp(2)))
 
         self.chk_recursive = ttk.Checkbutton(
             body,
@@ -162,7 +219,7 @@ class BindingEditorDialog(tk.Toplevel):
             style="Card.TCheckbutton",
             command=self._schedule_scan,
         )
-        self.chk_recursive.grid(row=7, column=1, sticky="w", pady=sp((2, 6)))
+        self.chk_recursive.grid(row=8, column=1, sticky="w", pady=sp((2, 6)))
 
         self.info_label = tk.Label(
             body,
@@ -174,7 +231,7 @@ class BindingEditorDialog(tk.Toplevel):
             justify="left",
             wraplength=sp(540),
         )
-        self.info_label.grid(row=8, column=0, columnspan=3, sticky="ew", padx=sp(16), pady=sp((6, 14)))
+        self.info_label.grid(row=9, column=0, columnspan=3, sticky="ew", padx=sp(16), pady=sp((6, 14)))
 
         footer = tk.Frame(self, bg=theme.BG)
         footer.pack(fill="x", padx=sp(16), pady=sp((0, 14)))
@@ -191,11 +248,13 @@ class BindingEditorDialog(tk.Toplevel):
             self.chk_recursive.grid()
             self.ignore_label.grid()
             self.ignore_text.grid()
+            self.ignore_actions.grid()
             self.ignore_hint.grid()
         else:
             self.chk_recursive.grid_remove()
             self.ignore_label.grid_remove()
             self.ignore_text.grid_remove()
+            self.ignore_actions.grid_remove()
             self.ignore_hint.grid_remove()
         self._schedule_scan()
 
@@ -211,6 +270,63 @@ class BindingEditorDialog(tk.Toplevel):
         if path:
             self.path_var.set(os.path.normpath(path))
             self._schedule_scan()
+
+    # ------------------------------------------------------------------ 忽略规则
+
+    def _ignore_patterns(self) -> list[str]:
+        patterns: list[str] = []
+        seen: set[str] = set()
+        for line in self.ignore_text.get("1.0", "end").replace(",", "\n").splitlines():
+            pattern = line.strip()
+            key = pattern.casefold()
+            if pattern and key not in seen:
+                seen.add(key)
+                patterns.append(pattern)
+        return patterns
+
+    def _set_ignore_patterns(self, patterns: list[str]) -> None:
+        unique: list[str] = []
+        seen: set[str] = set()
+        for pattern in patterns:
+            text = str(pattern).strip()
+            key = text.casefold()
+            if text and key not in seen:
+                seen.add(key)
+                unique.append(text)
+        self.ignore_text.delete("1.0", "end")
+        self.ignore_text.insert("1.0", "\n".join(unique))
+
+    def _append_ignore_patterns(self, patterns: list[str]) -> None:
+        self._set_ignore_patterns([*self._ignore_patterns(), *patterns])
+
+    def _patterns_for_paths(self, paths) -> list[str]:
+        target = self.path_var.get().strip()
+        folder = target if target and os.path.isdir(target) else ""
+        patterns: list[str] = []
+        for path in paths:
+            pattern = os.path.basename(path)
+            if folder:
+                try:
+                    relative = os.path.relpath(path, folder)
+                except ValueError:
+                    relative = ""
+                if relative and not relative.startswith(".."):
+                    pattern = relative.replace("/", "\\")
+            patterns.append(pattern)
+        return patterns
+
+    def _add_ignore_files(self) -> None:
+        target = self.path_var.get().strip()
+        options = {
+            "parent": self,
+            "title": "选择要忽略的程序",
+            "filetypes": [("可执行文件", "*.exe"), ("所有文件", "*.*")],
+        }
+        if target and os.path.isdir(target):
+            options["initialdir"] = target
+        paths = filedialog.askopenfilenames(**options)
+        if paths:
+            self._append_ignore_patterns(self._patterns_for_paths(paths))
 
     def _schedule_scan(self) -> None:
         target = self.path_var.get().strip()
@@ -265,12 +381,15 @@ class BindingEditorDialog(tk.Toplevel):
         if token != self._scan_token:
             return
         scope = "（含子文件夹）" if recursive else "（不含子文件夹）"
+        ignore_count = len(self._ignore_patterns())
+        suffix = f"；忽略规则 {ignore_count} 条" if ignore_count else ""
         if count:
             self.info_var.set(
-                f"该文件夹下检测到 {count} 个可执行文件{scope}；启动任意一个时会应用启动配置，退出后应用退出配置。"
+                f"该文件夹下检测到 {count} 个可执行文件{scope}{suffix}；"
+                "启动任意一个时会应用启动配置，退出后应用退出配置。"
             )
         else:
-            self.info_var.set(f"该文件夹下暂未检测到 .exe{scope}，仍可保存绑定。")
+            self.info_var.set(f"该文件夹下暂未检测到 .exe{scope}{suffix}，仍可保存绑定。")
 
     # ------------------------------------------------------------------ 保存
 
@@ -281,12 +400,7 @@ class BindingEditorDialog(tk.Toplevel):
         close_config = self.close_config_var.get().strip()
         if close_config == CLOSE_NONE_LABEL:
             close_config = ""
-        ignore: list[str] = []
-        if btype == BINDING_TYPE_FOLDER:
-            for line in self.ignore_text.get("1.0", "end").replace(",", "\n").splitlines():
-                pattern = line.strip()
-                if pattern and pattern not in ignore:
-                    ignore.append(pattern)
+        ignore = self._ignore_patterns() if btype == BINDING_TYPE_FOLDER else []
 
         if not target:
             messagebox.showwarning("缺少路径", "请填写或选择要绑定的程序/文件夹。", parent=self)
